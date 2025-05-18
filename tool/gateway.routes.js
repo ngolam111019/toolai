@@ -1,0 +1,20 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../db/db');
+
+// GET /api/gateways
+router.get('/gateways', async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT id, name, display_name, logo
+      FROM n_gateways
+      ORDER BY id ASC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Lỗi khi lấy danh sách gateways:', err);
+    res.status(500).json({ error: 'Lỗi server' });
+  }
+});
+
+module.exports = router;

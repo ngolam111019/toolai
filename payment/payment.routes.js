@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('./payment.controller');
+const { authMiddleware } = require('../auth/auth.middleware')
 
-router.post('/callback', controller.paymentCallback);
+router.post('/create', authMiddleware, controller.createPayment);
+router.get('/callback', controller.handlePaymentCallback);
+router.get('/check', controller.checkPaymentStatus);
 
 module.exports = router;
