@@ -71,20 +71,20 @@ async function getPackageStatus(req, res) {
   try {
     const userId = req.user.id;
 
-    // Lấy số Xu
-    const xuRes = await db.query(`SELECT balance_xu FROM n_users WHERE id = $1`, [userId]);
-    const xu = xuRes.rows[0]?.balance_xu || 0;
-
     // Lấy gói đang sử dụng (gói còn hạn)
     const { rows } = await db.query(`
       SELECT up.*, p.name, p.max_turns_per_day
       FROM n_user_packages up
       JOIN n_packages p ON p.id = up.package_id
       WHERE up.user_id = $1
-        AND (p.is_lifetime = true OR up.expired_at >= NOW())
+        AND (p.is_lifetime = true OR up.package_id = 0 OR up.expired_at >= NOW())
       ORDER BY up.expired_at DESC
       LIMIT 1
     `, [userId]);
+    
+  let expiredMessage = '';
+  let expiredAt = null;
+
 
     if (!rows.length) {
       return res.json({
@@ -95,12 +95,20 @@ async function getPackageStatus(req, res) {
           turns_used_today: 0,
           expired_at: null
         },
-        xu
+        xu: req.user.balance_xu || 0,
+        email: req.user.email
       });
+    }
+    else{
+      const last = rows[0];
+      expiredAt = last.expired_at;
+      expiredMessage = `Đã hết hạn vào ngày ${new Date(expiredAt).toLocaleDateString('vi-VN')}`;
     }
 
     const row = rows[0];
 
+    console.log(row);
+    
     return res.json({
       package: {
         id: row.package_id,
@@ -109,7 +117,8 @@ async function getPackageStatus(req, res) {
         turns_used_today: row.turns_used_today,
         expired_at: row.expired_at
       },
-      xu
+      xu: req.user.balance_xu | 0,
+      email: req.user.email,
     });
 
   } catch (err) {

@@ -9,8 +9,9 @@ const { authMiddleware } = require('../auth/auth.middleware')
 router.get('/packages', async (req, res) => {
   try {
     const result = await db.query(`
-      SELECT id, name, price, description
+      SELECT id, name, price, duration_days, description, color, bg_color, is_best_saler
       FROM n_packages
+      WHERE id > 0
       ORDER BY id ASC
     `);
     res.json(result.rows);

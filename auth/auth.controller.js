@@ -6,9 +6,11 @@ const SECRET = process.env.JWT_SECRET || 'mysecret';
 exports.register = async (req, res) => {
   const { email, password, device_id } = req.body;
   try {
+
+    console.log(req.body);
     const hashed = await bcrypt.hash(password, 10);
     const existing = await db.query('SELECT id FROM n_users WHERE email = $1', [email]);
-    if (existing.rows.length) return res.status(400).json({ error: 'Email already exists' });
+    if (existing.rows.length) return res.status(400).json({ message: 'Email này đã được đăng ký' });
 
     const userRes = await db.query(`
       INSERT INTO n_users (email, password_hash, device_id) 
@@ -17,14 +19,14 @@ exports.register = async (req, res) => {
 
     // gán gói dùng thử (package_id = 0)
     await db.query(`
-      INSERT INTO n_user_packages (user_id, package_id, activated_at)
-      VALUES ($1, 0, NOW())
+      INSERT INTO n_user_packages (user_id, package_id, activated_at, expired_at)
+      VALUES ($1, 0, NOW(), NOW() + interval '24 hours')
     `, [userRes.rows[0].id]);
 
-    res.json({ message: 'Registered successfully' });
+    res.json({ message: 'Đăng ký tài khoản thành công' });
   } catch (err) {
     console.log(err);
-    res.status(500).json({ error: 'Register failed' });
+    res.status(500).json({ message: 'Đăng ký tài khoản thất bại' });
   }
 };
 
@@ -32,15 +34,15 @@ exports.login = async (req, res) => {
   const { email, password, device_id } = req.body;
   try {
     const userRes = await db.query('SELECT * FROM n_users WHERE email = $1', [email]);
-    if (!userRes.rows.length) return res.status(404).json({ error: 'User not found' });
+    if (!userRes.rows.length) return res.status(404).json({ message: 'Tài khoản không tồn tại. Hãy đăng ký tài khoản' });
 
     const user = userRes.rows[0];
     const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!match) return res.status(401).json({ message: 'Thông tin đăng nhập không hợp lệ' });
 
     // kiểm tra device_id
     if (user.device_id && user.device_id !== device_id) {
-      return res.status(403).json({ error: 'Thiết bị không hợp lệ. Tài khoản đã gắn với thiết bị khác.' });
+      return res.status(403).json({ message: 'Thiết bị không hợp lệ. Tài khoản đã gắn với thiết bị khác.' });
     }
 
     // nếu chưa có device_id → gắn thiết bị này
@@ -49,9 +51,9 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign({ id: user.id }, SECRET, { expiresIn: '7d' });
-    res.json({ token });
+    res.json({ message: 'Đăng nhập thành công', token });
   } catch (err) {
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ message: 'Đăng nhập không thành công' });
   }
 };
 

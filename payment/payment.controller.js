@@ -1,6 +1,7 @@
 const db = require('../db/db');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const format = require('../utils/format');
 const querystring = require('querystring');
 const crypto = require('crypto');
 const { emitToRoom } = require('../socket/socket');
@@ -14,8 +15,8 @@ const createPayment = async (req, res) => {
     const userId = req.user.id;
     const { amount } = req.body;
 
-    if (![200000, 300000, 500000, 1000000, 2000000].includes(amount)) {
-      return res.status(400).json({ error: 'Số tiền không hợp lệ' });
+    if (![100000, 200000, 300000, 500000, 1000000, 2000000].includes(amount)) {
+      return res.status(400).json({ message: 'Số tiền không hợp lệ' });
     }
 
     const tranid = uuidv4();
@@ -53,7 +54,7 @@ const createPayment = async (req, res) => {
         content: 'RXWZYM'
       }
     }
-    const raw = process.env.GB_USERNAME + process.env.GB_PASSWORD + amount + tranid + '9' + 'success';
+    const raw = process.env.GB_USERNAME + process.env.GB_PASSWORD + amount + tranid + '8' + 'success';
     const computedSig = crypto.createHash('sha256').update(raw).digest('hex');
     console.log('signature: ' + computedSig);
     console.log('tranid: ' + tranid);
@@ -79,7 +80,7 @@ const createPayment = async (req, res) => {
     return res.json(rs);
   } catch (err) {
     console.error('[createPayment]', err);
-    return res.status(500).json({ error: 'Lỗi tạo giao dịch nạp xu' });
+    return res.status(500).json({ message: 'Lỗi tạo giao dịch nạp xu' });
   }
 }
 
@@ -124,7 +125,14 @@ const handlePaymentCallback = async (req, res) => {
         SET status = 'failed'
         WHERE id = $1
       `, [tx.id]);
-      return res.status(400).json({ code: 0, message: 'Giao dịch thất bại' });
+      emitToRoom(tran_id, 'payment_result', {
+        is_success: false,
+        amount: amount,
+        tranid: tran_id,
+        message: messages,
+        confirmed_at: new Date()
+      });
+      return res.status(400).json({ code: 0, message: messages });
     }
     else{
       const bonusAmount = (amount == 2000000) ? 500000 : 0;
@@ -148,16 +156,17 @@ const handlePaymentCallback = async (req, res) => {
           VALUES ($1, $2, 'bonus', 'success', 'Tặng thêm khi nạp 2 triệu', $3)
         `, [tx.user_id, bonusAmount, tx.ref_code]); // ref_code = tranid
 
-        messageBonus = "Được tặng thêm " + bonusAmount + " xu vào tài khoản."
+        messageBonus = "Được tặng thêm " + format.formatWithUnit(bonusAmount,'Xu') + " vào tài khoản."
       }
     
     var totalAmount = parseInt(amount) + parseInt(bonusAmount);
+
     // Gửi socket về client
-    emitToRoom(tran_id, 'payment_success', {
-      type: 'xu',
+    emitToRoom(tran_id, 'payment_result', {
+      is_success: true,
       amount: totalAmount,
       tranid: tran_id,
-      message: '✅ Nạp ' + amount + ' xu thành công. ' + messageBonus,
+      message: '✅ Nạp ' + format.formatWithUnit(amount,'Xu') + ' thành công. ' + messageBonus,
       confirmed_at: new Date()
     });
       return res.json({ ok: true });
