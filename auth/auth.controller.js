@@ -19,8 +19,8 @@ exports.register = async (req, res) => {
 
     // gán gói dùng thử (package_id = 0)
     await db.query(`
-      INSERT INTO n_user_packages (user_id, package_id, activated_at, expired_at)
-      VALUES ($1, 0, NOW(), NOW() + interval '24 hours')
+      INSERT INTO n_user_packages (user_id, package_id, activated_at, expired_at, last_turn_reset)
+      VALUES ($1, 0, NOW(), NOW() + interval '24 hours', NOW())
     `, [userRes.rows[0].id]);
 
     res.json({ message: 'Đăng ký tài khoản thành công' });

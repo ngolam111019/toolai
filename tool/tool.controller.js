@@ -8,7 +8,7 @@ async function useTool(req, res) {
     if (!gateway) return res.status(400).json({ error: 'Thiếu tham số gateway' });
     // (0) Kiểm tra gateway có được phép theo gói không
     if (req.pkg?.allowed_gateways?.includes && !req.pkg.allowed_gateways.includes(gateway)) {
-      return res.status(403).json({ error: 'Cổng này không thuộc gói bạn đang dùng' });
+      return res.status(403).json({ message: 'Cổng này không thuộc gói bạn đang dùng' });
     }
 
     // (1) Giả lập kết quả tài xỉu
@@ -21,10 +21,11 @@ async function useTool(req, res) {
 
     // (2) Trừ lượt sau khi dùng
     const userPackageId = req.pkg?.id;
+    console.log("userPackageId: " + userPackageId);
     if (userPackageId) {
       await db.query(`
-        UPDATE n_user_packages
-        SET turns_used_today = turns_used_today + 1
+        UPDATE n_user_packages 
+        SET turns_used_today = COALESCE(turns_used_today, 0) + 1 
         WHERE id = $1
       `, [userPackageId]);
     }
@@ -34,14 +35,20 @@ async function useTool(req, res) {
     const used = req.pkg?.turns_used + 1;
     const turnsLeft = max - used;
 
+    console.log({
+      result,
+      turns_left: turnsLeft,
+      max_turns: max
+    });
     return res.json({
       result,
-      turns_left: turnsLeft
+      turns_left: turnsLeft,
+      max_turns: max
     });
 
   } catch (err) {
     console.error('[useTool]', err);
-    res.status(500).json({ error: 'Lỗi xử lý tool' });
+    res.status(500).json({ message: 'Lỗi xử lý tool' });
   }
 }
 

@@ -54,7 +54,7 @@ const createPayment = async (req, res) => {
         content: 'RXWZYM'
       }
     }
-    const raw = process.env.GB_USERNAME + process.env.GB_PASSWORD + amount + tranid + '8' + 'success';
+    const raw = process.env.GB_USERNAME + process.env.GB_PASSWORD + amount + tranid + '9' + 'success';
     const computedSig = crypto.createHash('sha256').update(raw).digest('hex');
     console.log('signature: ' + computedSig);
     console.log('tranid: ' + tranid);

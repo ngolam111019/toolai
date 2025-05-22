@@ -73,7 +73,7 @@ async function getPackageStatus(req, res) {
 
     // Lấy gói đang sử dụng (gói còn hạn)
     const { rows } = await db.query(`
-      SELECT up.*, p.name, p.max_turns_per_day
+      SELECT up.*, p.name, p.max_turns_per_day, p.gateways
       FROM n_user_packages up
       JOIN n_packages p ON p.id = up.package_id
       WHERE up.user_id = $1
@@ -93,7 +93,8 @@ async function getPackageStatus(req, res) {
           name: 'Chưa có gói hoặc đã hết hạn',
           max_turns_per_day: 0,
           turns_used_today: 0,
-          expired_at: null
+          expired_at: null,
+          gateways:[]
         },
         xu: req.user.balance_xu || 0,
         email: req.user.email
@@ -115,7 +116,9 @@ async function getPackageStatus(req, res) {
         name: row.name,
         max_turns_per_day: row.max_turns_per_day,
         turns_used_today: row.turns_used_today,
-        expired_at: row.expired_at
+        expired_at: row.expired_at,
+        gateways: row.gateways,
+        is_gift: row.is_gift
       },
       xu: req.user.balance_xu | 0,
       email: req.user.email,

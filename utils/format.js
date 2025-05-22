@@ -31,9 +31,29 @@ function formatCurrency(amount) {
   function formatWithUnit(amount, unit = 'xu') {
     return `${amount.toLocaleString('vi-VN')} ${unit}`;
   }
-  
+
+  function formatDateVN(dateInput) {
+    try {
+      const date = new Date(dateInput);
+      return date.toLocaleString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        hour12: false,
+      });
+    } catch (err) {
+      return '---'; // fallback nếu lỗi
+    }
+  }
+
+  function getTodayISO_VN() {
+    const nowVN = new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const d = new Date(nowVN);
+    return d.toISOString();
+  }
+
   module.exports = {
     formatCurrency,
     formatNumber,
-    formatWithUnit
+    formatWithUnit,
+    formatDateVN,
+    getTodayISO_VN
   };

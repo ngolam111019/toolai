@@ -6,4 +6,8 @@ const pool = new Pool({
   }
 });
 
+pool.on('connect', async (client) => {
+  await client.query(`SET TIME ZONE 'Asia/Ho_Chi_Minh'`);
+});
+
 module.exports = pool;

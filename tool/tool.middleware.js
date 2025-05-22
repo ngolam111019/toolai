@@ -1,4 +1,5 @@
 const db = require('../db/db');
+const format = require('../utils/format');
 
 async function checkToolUsageLimit(req, res, next) {
   try {
@@ -10,31 +11,49 @@ async function checkToolUsageLimit(req, res, next) {
       FROM n_user_packages up
       JOIN n_packages p ON p.id = up.package_id
       WHERE up.user_id = $1
-        AND (p.is_lifetime = true OR up.expired_at >= NOW())
+        AND (p.is_lifetime = true OR up.expired_at >= $2)
       ORDER BY up.expired_at DESC
       LIMIT 1
-    `, [userId]);
+    `, [userId, format.getTodayISO_VN()]);
 
     if (!rows.length) {
-      return res.status(403).json({ error: 'Bạn chưa có gói hợp lệ hoặc đã hết hạn' });
+      return res.status(403).json({ message: 'Gói đã hết hạn, vui lòng nâng cấp để sử dụng tiếp' });
     }
 
     const pkg = rows[0];
-    const today = new Date().toISOString().slice(0, 10);
-    const lastReset = pkg.last_turn_reset.toISOString().slice(0, 10);
-
+    
+    const today = format.getTodayISO_VN().slice(0, 10);
+    var lastReset = pkg.last_turn_reset;
+    if (!lastReset) {
+      // Nếu lần đầu chưa có thì xem như chưa dùng hôm nay
+      lastReset = today;
+    } else {
+      lastReset = new Date(lastReset).toISOString().slice(0, 10);
+    }
+    console.log("lastReset2: " + lastReset);
     let turnsUsed = pkg.turns_used_today;
-
-    // Nếu đã sang ngày mới → reset lượt
-    if (lastReset !== today) {
-      await db.query(`
-        UPDATE n_user_packages
-        SET turns_used_today = 0, last_turn_reset = NOW()
-        WHERE id = $1
-      `, [pkg.id]);
-      turnsUsed = 0;
+    console.log(lastReset);
+    console.log(today);
+    console.log(pkg.id);
+    console.log(pkg.id !== 0);
+    
+    if(pkg.id !== 0){
+      // Nếu đã sang ngày mới → reset lượt
+      if (lastReset !== today) {
+      console.log("reset");
+        await db.query(`
+          UPDATE n_user_packages
+          SET turns_used_today = 0, last_turn_reset = NOW()
+          WHERE id = $1
+        `, [pkg.id]);
+        turnsUsed = 0;
+      }
+    }
+    else if(pkg.id === 0 && turnsUsed === pkg.max_turns_per_day) {
+      return res.status(403).json({ message: 'Bạn đã dùng hết ' + pkg.max_turns_per_day + ' lượt dùng thử. Vui lòng nâng cấp để sử dụng tiếp.' });
     }
 
+    console.log((turnsUsed < pkg.max_turns_per_day));
     // Nếu còn lượt → cho dùng tiếp
     if (turnsUsed < pkg.max_turns_per_day) {
       req.pkg = {
@@ -46,11 +65,11 @@ async function checkToolUsageLimit(req, res, next) {
       return next();
     }
 
-    return res.status(403).json({ error: 'Bạn đã hết lượt chơi hôm nay' });
+    return res.status(403).json({ message: 'Bạn đã hết lượt chơi hôm nay' });
 
   } catch (err) {
     console.error('[checkToolUsageLimit]', err);
-    res.status(500).json({ error: 'Lỗi kiểm tra lượt chơi' });
+    res.status(500).json({ message: 'Lỗi kiểm tra lượt chơi' });
   }
 }
 
