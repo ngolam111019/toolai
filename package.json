@@ -1,0 +1,23 @@
+{
+  "name": "toolai",
+  "version": "1.0.0",
+  "main": "index.js",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ngolam111019/toolai.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ngolam111019/toolai/issues"
+  },
+  "homepage": "https://github.com/ngolam111019/toolai#readme",
+  "description": ""
+}

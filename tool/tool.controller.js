@@ -3,47 +3,62 @@ const db = require('../db/db');
 async function useTool(req, res) {
   try {
     const userId = req.user.id;
-    const { gateway } = req.body;
+    const { gateway, result, round_code } = req.body;
 
-    if (!gateway) return res.status(400).json({ error: 'Thiếu tham số gateway' });
-    // (0) Kiểm tra gateway có được phép theo gói không
+    if (!gateway) return res.status(400).json({ message: 'Thiếu tham số gateway' });
+
+    // (0) Kiểm tra quyền truy cập
     if (req.pkg?.allowed_gateways?.includes && !req.pkg.allowed_gateways.includes(gateway)) {
       return res.status(403).json({ message: 'Cổng này không thuộc gói bạn đang dùng' });
     }
 
-    // (1) Giả lập kết quả tài xỉu
-    const result = Math.random() < 0.5 ? 'Tài' : 'Xỉu';
-
-    await db.query(`
-      INSERT INTO n_tool_usage_logs (user_id, gateway, prediction)
-      VALUES ($1, $2, $3)
-    `, [userId, gateway, result]);
-
-    // (2) Trừ lượt sau khi dùng
     const userPackageId = req.pkg?.id;
-    console.log("userPackageId: " + userPackageId);
+
+    let finalResult = result;
+    let shouldLog = false;
+
+    // (1) Nếu là Zon88 và đủ thông tin → ghi log
+    if (gateway === process.env.GATEWAY_DEMO && result && round_code) {
+      if (result >= 3 && result<= 10) {
+        finalResult =  'Xỉu';
+      }
+      else if (result >= 11 && result<= 18){
+        finalResult = 'Tài';
+      }
+      else {
+        finalResult = Math.random() < 0.5 ? 'Tài' : 'Xỉu';
+      }
+      shouldLog = true;
+    } else {
+      // (2) Nếu thiếu thông tin hoặc cổng khác → tạo kết quả ngẫu nhiên
+      finalResult = Math.random() < 0.5 ? 'Tài' : 'Xỉu';
+    }
+
+    // (3) Ghi log nếu đủ điều kiện
+    if (shouldLog) {
+      await db.query(`
+        INSERT INTO n_tool_usage_logs (user_id, gateway, prediction, round_code)
+        VALUES ($1, $2, $3, $4)
+      `, [userId, gateway, finalResult, round_code]);
+    }
+
+    // (4) Trừ lượt nếu có gói
     if (userPackageId) {
       await db.query(`
-        UPDATE n_user_packages 
-        SET turns_used_today = COALESCE(turns_used_today, 0) + 1 
+        UPDATE n_user_packages
+        SET turns_used_today = COALESCE(turns_used_today, 0) + 1
         WHERE id = $1
       `, [userPackageId]);
     }
 
-    // (3) Trả kết quả + lượt còn lại
+    // (5) Trả kết quả + lượt còn lại
     const max = req.pkg?.max_turns || 0;
     const used = req.pkg?.turns_used + 1;
     const turnsLeft = max - used;
 
-    console.log({
-      result,
-      turns_left: turnsLeft,
-      max_turns: max
-    });
     return res.json({
-      result,
-      turns_left: turnsLeft,
-      max_turns: max
+      result: (round_code ? '#'+round_code + ' - ' + finalResult : finalResult),
+      turns_left: turnsLeft
     });
 
   } catch (err) {
