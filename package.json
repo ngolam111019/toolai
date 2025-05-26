@@ -19,5 +19,8 @@
     "url": "https://github.com/ngolam111019/toolai/issues"
   },
   "homepage": "https://github.com/ngolam111019/toolai#readme",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "dotenv": "^16.5.0"
+  }
 }
