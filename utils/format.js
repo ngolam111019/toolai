@@ -54,6 +54,18 @@ function formatCurrency(amount) {
     return nowVN;
   }
 
+  function getTodayVN() {
+    const options = { timeZone: 'Asia/Ho_Chi_Minh' };
+    const now = new Date().toLocaleString('en-US', options);
+    const date = new Date(now);
+
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0'); // Months start at 0
+    const dd = String(date.getDate()).padStart(2, '0');
+
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   function convertToVietnamTime(utcDatetime) {
     return dayjs(utcDatetime)
       .tz('Asia/Ho_Chi_Minh')
@@ -65,5 +77,6 @@ function formatCurrency(amount) {
     formatNumber,
     formatWithUnit,
     formatDateVN,
-    getTodayISO_VN
+    getTodayISO_VN,
+    getTodayVN
   };

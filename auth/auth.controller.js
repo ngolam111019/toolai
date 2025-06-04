@@ -23,16 +23,19 @@ exports.login = async (req, res) => {
     }
 
     // nếu chưa có device_id → gắn thiết bị này
+    // và gửi thông báo đăng nhập lần đầu
     if (!user.device_id) {
       await db.query('UPDATE n_users SET device_id = $1 WHERE id = $2', [device_id, user.id]);
-    }
-    sendPushNotificationToToken(user.fcm_token,
+
+      sendPushNotificationToToken(user.fcm_token,
           {
             title: "Bạn có 5 lượt dùng thử miễn phí", 
-            message: "Bạn có 5 lượt dùng thử miễn phí trong 24h",
+            message: "Bạn có 5 lượt dùng thử miễn phí cho cổng game Zon88 trong 24h. Thử ngay để thấy độ chính xác của Tool AI nhé!",
             btnText: "Thử ngay", 
             screen_redirect: "tool"
           });
+    }
+    
     const token = jwt.sign({ id: user.id }, SECRET, { expiresIn: '7d' });
     res.json({ message: 'Đăng nhập thành công', token });
   } catch (err) {

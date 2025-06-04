@@ -42,7 +42,7 @@ async function useTool(req, res) {
         VALUES ($1, $2, $3, $4)
       `, [userId, gateway, finalResult, round_code]);
     }
-
+    console.log("userPackageId: " + userPackageId);
     // (4) Trừ lượt nếu có gói
     if (userPackageId) {
       await db.query(`

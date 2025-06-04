@@ -23,7 +23,7 @@ async function checkToolUsageLimit(req, res, next) {
 
     const pkg = rows[0];
     
-    const today = format.getTodayISO_VN().slice(0, 10);
+    const today = format.getTodayVN();
     var lastReset = pkg.last_turn_reset;
     if (!lastReset) {
       // Nếu lần đầu chưa có thì xem như chưa dùng hôm nay
