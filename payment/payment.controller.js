@@ -32,7 +32,7 @@ const createPayment = async (req, res) => {
       tran_id: tranid,
       amount,
       bank_code: 'VCB',
-      url_code: 0,
+      url_code: 448,
       message
     });
 
