@@ -1,5 +1,9 @@
 // utils/format.js
-
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 /**
  * Format số thành tiền tệ Việt Nam, có đơn vị ₫
  * @param {number} amount
@@ -46,8 +50,14 @@ function formatCurrency(amount) {
 
   function getTodayISO_VN() {
     const nowVN = new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
-    const d = new Date(nowVN);
-    return d.toISOString();
+    console.log("nowVN: "+ nowVN);
+    return nowVN;
+  }
+
+  function convertToVietnamTime(utcDatetime) {
+    return dayjs(utcDatetime)
+      .tz('Asia/Ho_Chi_Minh')
+      .format('DD/MM/YYYY HH:mm');
   }
 
   module.exports = {

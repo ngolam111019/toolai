@@ -5,6 +5,5 @@ const { authMiddleware } = require('../auth/auth.middleware')
 
 router.post('/create', authMiddleware, controller.createPayment);
 router.get('/callback', controller.handlePaymentCallback);
-router.get('/check', controller.checkPaymentStatus);
 
 module.exports = router;

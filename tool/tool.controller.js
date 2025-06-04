@@ -1,4 +1,5 @@
 const db = require('../db/db');
+const { sendDiscord } = require('../utils/discordNotify');
 
 async function useTool(req, res) {
   try {
@@ -63,6 +64,7 @@ async function useTool(req, res) {
 
   } catch (err) {
     console.error('[useTool]', err);
+    sendDiscord('error', `🚨 Lỗi hệ thống [useTool]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
     res.status(500).json({ message: 'Lỗi xử lý tool' });
   }
 }

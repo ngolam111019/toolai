@@ -1,5 +1,6 @@
 const db = require('../db/db');
 const format = require('../utils/format');
+const { sendDiscord } = require('../utils/discordNotify');
 
 async function checkToolUsageLimit(req, res, next) {
   try {
@@ -11,10 +12,10 @@ async function checkToolUsageLimit(req, res, next) {
       FROM n_user_packages up
       JOIN n_packages p ON p.id = up.package_id
       WHERE up.user_id = $1
-        AND (p.is_lifetime = true OR up.expired_at >= $2)
+        AND (p.is_lifetime = true OR up.expired_at >= NOW())
       ORDER BY up.expired_at DESC
       LIMIT 1
-    `, [userId, format.getTodayISO_VN()]);
+    `, [userId]);
 
     if (!rows.length) {
       return res.status(403).json({ message: 'Gói đã hết hạn, vui lòng nâng cấp để sử dụng tiếp' });
@@ -69,6 +70,7 @@ async function checkToolUsageLimit(req, res, next) {
 
   } catch (err) {
     console.error('[checkToolUsageLimit]', err);
+    sendDiscord('error', `🚨 Lỗi hệ thống [checkToolUsageLimit]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
     res.status(500).json({ message: 'Lỗi kiểm tra lượt chơi' });
   }
 }

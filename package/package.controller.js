@@ -1,11 +1,22 @@
 const db = require('../db/db');
-const jwt = require('jsonwebtoken');
+const format = require('../utils/format');
+const { sendDiscord } = require('../utils/discordNotify');
 
-const PACKAGE_PRICES = {
-  1: 1499000,
-  2: 1999000,
-  3: 9999000
-};
+async function getPackages(req, res) {
+  try {
+    const result = await db.query(`
+      SELECT id, name, price, duration_days, gateways, description, color, bg_color, is_best_saler, max_turns_per_day, is_gift
+      FROM n_packages
+      WHERE id > 0
+      ORDER BY id ASC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Lỗi khi lấy danh sách gói:', err);
+    sendDiscord('error', `🚨 Lỗi hệ thống [getPackages]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
+    res.status(500).json({ error: 'Lỗi server' });
+  }
+}
 
 async function upgradePackage(req, res) {
   try {
@@ -14,7 +25,7 @@ async function upgradePackage(req, res) {
 
     // B1: Lấy gói cần nâng cấp
     const { rows } = await db.query(`SELECT * FROM n_packages WHERE id = $1`, [package_id]);
-    if (!rows.length) return res.status(400).json({ error: 'Gói không tồn tại' });
+    if (!rows.length) return res.status(400).json({ message: 'Gói không tồn tại' });
 
     const pkg = rows[0];
     const price = pkg.price;
@@ -26,7 +37,7 @@ async function upgradePackage(req, res) {
     const currentBalance = userRes.rows[0]?.balance_xu || 0;
 
     if (currentBalance < price) {
-      return res.status(400).json({ error: 'Không đủ Xu để nâng cấp' });
+      return res.status(400).json({ message: 'Không đủ Xu để nâng cấp' });
     }
 
 
@@ -53,7 +64,13 @@ async function upgradePackage(req, res) {
       VALUES ($1, $2, 0, NOW(), $3)
     `, [userId, pkg.id, expiredAt]);
 
-    console.log(userId);
+
+    sendDiscord('upgrade', null, {
+      title: '📦 Nâng cấp thành công ' + pkg.name,
+      description: `**User_Id:** `+ userId + `\n **Price:** ` + format.formatWithUnit(price,'đ'),
+      color: 0xFFD700
+    });
+
     return res.json({
       success: true,
       message: 'Nâng cấp thành công',
@@ -63,7 +80,8 @@ async function upgradePackage(req, res) {
 
   } catch (err) {
     console.error('[upgradePackage]', err);
-    res.status(500).json({ error: 'Lỗi nâng cấp gói' });
+    sendDiscord('error', `🚨 Lỗi hệ thống [upgradePackage]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
+    res.status(500).json({ message: 'Lỗi nâng cấp gói' });
   }
 }
 
@@ -126,11 +144,13 @@ async function getPackageStatus(req, res) {
 
   } catch (err) {
     console.error('[getPackageStatus] error:', err);
-    res.status(500).json({ error: 'Lỗi lấy trạng thái gói' });
+    sendDiscord('error', `🚨 Lỗi hệ thống [getPackageStatus]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
+    res.status(500).json({ message: 'Lỗi lấy trạng thái gói' });
   }
 }
 
 module.exports = {
+  getPackages,
   upgradePackage,
   getPackageStatus
 };

@@ -6,6 +6,15 @@ const cors = require('cors');
 const app = express();
 const db = require('./db/db');
 const server = http.createServer(app);
+const admin = require('firebase-admin');
+const serviceAccount = require('./serviceAccountKey.json');
+const { sendDiscord } = require('./utils/discordNotify');
+
+
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 
 // Routers
@@ -15,6 +24,7 @@ const paymentRoutes = require('./payment/payment.routes');
 const packageRoutes = require('./package/package.routes');
 const gatewayRoutes = require('./tool/gateway.routes');
 const balanceRoutes = require('./balance/balance.routes');
+const usageLogsRoutes = require('./usagelogs/usagelog.routes');
 
 // Middleware chung
 app.use(cors());
@@ -27,6 +37,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/package', packageRoutes);
 app.use('/api/gateway', gatewayRoutes);
 app.use('/api/balance', balanceRoutes);
+app.use('/api/usagelog', usageLogsRoutes);
 
 // Health check
 app.get('/', (req, res) => {
@@ -54,6 +65,7 @@ server.listen(PORT, async () => {
     console.log(`✅ DB connected`);
     console.log(`🚀 Server + Socket running at http://localhost:${PORT}`);
   } catch (err) {
+    sendDiscord('error', `🚨 Lỗi hệ thống [index]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
     console.error('❌ Failed to connect to DB:', err);
   }
 });

@@ -1,4 +1,5 @@
 const db = require('../db/db');
+const { sendDiscord } = require('../utils/discordNotify');
 
 async function getBalanceLogs(req, res) {
   try {
@@ -15,7 +16,8 @@ async function getBalanceLogs(req, res) {
     return res.json(rows);
   } catch (err) {
     console.error('[getBalanceLogs]', err);
-    res.status(500).json({ error: 'Lỗi lấy lịch sử giao dịch Xu' });
+    sendDiscord('error', `🚨 Lỗi hệ thống [getBalanceLogs]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
+    res.status(500).json({ message: 'Lỗi lấy lịch sử giao dịch Xu' });
   }
 }
 

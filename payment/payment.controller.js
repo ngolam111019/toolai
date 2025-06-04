@@ -2,10 +2,12 @@ const db = require('../db/db');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const format = require('../utils/format');
+const { sendDiscord } = require('../utils/discordNotify');
 const querystring = require('querystring');
 const crypto = require('crypto');
 const { emitToRoom } = require('../socket/socket');
 const { v4: uuidv4 } = require('uuid');
+const {sendPushNotificationToToken } = require('../utils/noti');
 
 // ==============================
 // POST /payment/create
@@ -80,6 +82,7 @@ const createPayment = async (req, res) => {
     return res.json(rs);
   } catch (err) {
     console.error('[createPayment]', err);
+    sendDiscord('error', `🚨 Lỗi hệ thống [createPayment]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
     return res.status(500).json({ message: 'Lỗi tạo giao dịch nạp xu' });
   }
 }
@@ -96,7 +99,6 @@ const handlePaymentCallback = async (req, res) => {
       signature
     } = req.query;
 
-    console.log(req.query);
     // Xác minh chữ ký
     const raw = username + password + amount + tran_id + errorcode + messages;
     const computedSig = crypto.createHash('sha256').update(raw).digest('hex');
@@ -118,6 +120,9 @@ const handlePaymentCallback = async (req, res) => {
 
     const tx = rows[0];
     
+    // Gửi socket về client
+    const userRes = await db.query(`SELECT fcm_token FROM n_users WHERE id = $1`, [tx.user_id]);
+    const fcm_token = userRes.rows[0]?.fcm_token || "";
     if (errorcode !== "9") {
       // Nếu là thất bại
       await db.query(`
@@ -125,13 +130,31 @@ const handlePaymentCallback = async (req, res) => {
         SET status = 'failed'
         WHERE id = $1
       `, [tx.id]);
-      emitToRoom(tran_id, 'payment_result', {
+
+
+      var title =  '❌ Nạp ' + format.formatWithUnit(amount,'Xu') + ' thất bại. ';
+      var message = title + '\n Trạng thái: ' + messages;
+
+      const resultIo = emitToRoom(tran_id, 'payment_result', {
         is_success: false,
         amount: amount,
         tranid: tran_id,
-        message: messages,
+        message: message,
         confirmed_at: new Date()
       });
+
+      if (!resultIo && fcm_token) {
+        var data = {
+            title: title,
+            message: `Mã giao dịch: ` + tran_id + `\n ` + message,
+            btnText: "Xem lịch sử giao dịch", 
+            screen_redirect: "history"
+          }
+
+        // Không ai còn trong room, gửi FCM thay thế
+        sendPushNotificationToToken(fcm_token, data);
+      } 
+
       return res.status(400).json({ code: 0, message: messages });
     }
     else{
@@ -159,48 +182,45 @@ const handlePaymentCallback = async (req, res) => {
         messageBonus = "Được tặng thêm " + format.formatWithUnit(bonusAmount,'Xu') + " vào tài khoản."
       }
     
-    var totalAmount = parseInt(amount) + parseInt(bonusAmount);
+      var totalAmount = parseInt(amount) + parseInt(bonusAmount);
+      var title =  '✅ Nạp ' + format.formatWithUnit(amount,'Xu') + ' thành công. ';
+      var message = title + messageBonus;
+    
 
-    // Gửi socket về client
-    emitToRoom(tran_id, 'payment_result', {
-      is_success: true,
-      amount: totalAmount,
-      tranid: tran_id,
-      message: '✅ Nạp ' + format.formatWithUnit(amount,'Xu') + ' thành công. ' + messageBonus,
-      confirmed_at: new Date()
-    });
+      const resultIo = emitToRoom(tran_id, 'payment_result', {
+        is_success: true,
+        amount: totalAmount,
+        tranid: tran_id,
+        message: message,
+        confirmed_at: new Date()
+      });
+
+      if (!resultIo && fcm_token) {
+        var data = {
+            title: title,
+            message: `Mã giao dịch: ` + tran_id + `\n ` + message,
+            btnText: "Xem lịch sử giao dịch", 
+            screen_redirect: "history"
+          }
+        // Không ai còn trong room, gửi FCM thay thế
+        sendPushNotificationToToken(fcm_token, data);
+      } 
+
+      sendDiscord('payment', null, {
+        title: title,
+        description: `Mã giao dịch: ` + tran_id + `\n ` + message,
+        color: 0x00FF00
+      });
       return res.json({ ok: true });
     }
   } catch (err) {
     console.error('[payment/callback]', err);
+    sendDiscord('error', `🚨 Lỗi hệ thống [payment/callback]: ${err.message + " - " + req.query.tran_id + "-" + req.query.errorcode + " - " + req.query.messages}\nThời gian: ${new Date().toLocaleString()}`);
     return res.status(500).json({ code: 0, message: 'Lỗi hệ thống callback' });
-  }
-}
-
-// ==============================
-// GET /payment/check?tranid=...
-// ==============================
-const checkPaymentStatus = async (req, res) => {
-  try {
-    const { tranid } = req.query;
-    if (!tranid) return res.status(400).json({ error: 'Thiếu tranid' });
-
-    const { rows } = await db.query(`SELECT payment_status FROM n_payments WHERE tranid = $1`, [tranid]);
-    console.log(tranid);
-    console.log(!rows.length);
-    if (!rows.length) return res.json({ success: false });
-
-    const status = rows[0].payment_status;
-    console.log(status);
-    return res.json({ success: status === 'success' });
-  } catch (err) {
-    console.error('[checkPaymentStatus]', err);
-    return res.status(500).json({ success: false });
   }
 }
 
 module.exports = {
   createPayment,
-  handlePaymentCallback,
-  checkPaymentStatus
+  handlePaymentCallback
 };

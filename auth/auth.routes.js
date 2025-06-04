@@ -1,10 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('./auth.controller');
+const { authMiddleware } = require('../auth/auth.middleware')
 
-router.post('/register', controller.register);
 router.post('/login', controller.login);
-router.post('/forgot-password', controller.forgotPassword);
-router.post('/reset-password', controller.resetPassword);
+router.post('/request-otp', controller.requestOtp);
+router.post('/verify-otp', controller.verifyOtp);
+router.post('/confirm-register', controller.confirmRegister);
+router.post('/request-reset', controller.requestReset);
+router.post('/verify-reset', controller.verifyResetOtp);
+router.post('/send-new-password', controller.sendNewPassword);
+router.post('/change-password', authMiddleware, controller.changePassword);
+router.post('/fcm-token', authMiddleware, controller.fcmToken);
 
 module.exports = router;
