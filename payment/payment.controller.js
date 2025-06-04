@@ -38,13 +38,13 @@ const createPayment = async (req, res) => {
 
     
     /*call api bên thứ 3*/
-    /*const gbRes = await axios.get(gbUrl);
+    const gbRes = await axios.get(gbUrl);
     if (gbRes.data?.code != 1) {
       return res.status(500).json({ error: gbRes.data?.message || 'Tạo QR thất bại' });
-    }*/
+    }
     /*call api bên thứ 3 end*/
     /*giả lâp test*/
-    const gbRes = {
+    /*const gbRes = {
       data: {
         code: 1,
         message: 'Success',
@@ -59,7 +59,7 @@ const createPayment = async (req, res) => {
     const raw = process.env.GB_USERNAME + process.env.GB_PASSWORD + amount + tranid + '9' + 'success';
     const computedSig = crypto.createHash('sha256').update(raw).digest('hex');
     console.log('signature: ' + computedSig);
-    console.log('tranid: ' + tranid);
+    console.log('tranid: ' + tranid);*/
     /*giả lâp test end*/
     
     // Ghi vào bảng n_transactions
