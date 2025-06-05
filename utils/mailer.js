@@ -33,4 +33,17 @@ async function sendOtpEmail(to, otp) {
   return transporter.sendMail(mailOptions);
 }
 
-module.exports = { sendOtpEmail, sendMail };
+
+async function sendPasswordEmail(to, pass) {
+  const mailOptions = {
+    from: `"Tool AI" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: 'Tài khoản Tool AI đã được tạo',
+    html: `<p>Chúc mừng bạn đã đăng ký thành công.</p>
+           <p>Mật khẩu đăng nhập là: <strong>${pass}</strong></p>`
+  };
+  
+  return transporter.sendMail(mailOptions);
+}
+
+module.exports = { sendOtpEmail, sendMail, sendPasswordEmail };
