@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const SECRET = process.env.JWT_SECRET || 'mysecret';
-const {sendOtpEmail, sendMail } = require('../utils/mailer');
+const {sendOtpEmail, sendEmailDangKyThanhCong, sendEmailFogotPassword } = require('../utils/mailer');
 const {sendPushNotificationToToken } = require('../utils/noti');
 const { sendDiscord } = require('../utils/discordNotify');
 
@@ -62,7 +62,7 @@ exports.requestOtp = async (req, res) => {
       ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, verified = false
     `, [email, otp, expiresAt]);
 
-    await sendOtpEmail(email, otp);
+    await sendOtpEmail(email, otp, 'Mã xác thực tài khoản của bạn');
 
     res.json({ message: 'OTP đã được gửi tới email của bạn' });
   } catch (err) {
@@ -113,7 +113,7 @@ exports.confirmRegister = async (req, res) => {
 
     await db.query('DELETE FROM n_user_pending WHERE email = $1', [email]);
 
-    await sendMail(email, 'Tài khoản Tool AI đã được tạo', `Chúc mừng bạn đã đăng ký thành công. Mật khẩu đăng nhập là: ${password}`);
+    await sendEmailDangKyThanhCong(email, password);
 
     res.json({ message: 'Đăng ký tài khoản thành công' });
   } catch (err) {
@@ -147,7 +147,7 @@ exports.requestReset = async (req, res) => {
     `, [email, otp]);
 
     // Gửi mail
-    await sendMail(email, 'Mã OTP khôi phục mật khẩu',`<p>Mã OTP khôi phục mật khẩu của bạn là:</p><h2>${otp}</h2>`);
+    await sendOtpEmail(email, otp, 'Mã OTP khôi phục mật khẩu');
 
     return res.json({ message: 'OTP đã được gửi về email' });
   } catch (err) {
@@ -219,8 +219,7 @@ exports.sendNewPassword = async (req, res) => {
     await db.query(`UPDATE n_users SET password_hash = $1 WHERE email = $2`, [hashed, email]);
 
     // Gửi email
-    await sendMail(email,'Mật khẩu mới của bạn',`<p>Mật khẩu mới của bạn là: <b>${newPassword}</b></p>
-             <p>Hãy đăng nhập và đổi lại mật khẩu ngay nhé!</p>`);
+    await sendEmailFogotPassword(email, newPassword);
 
     // Xoá bản ghi OTP sau khi dùng xong
     await db.query(`DELETE FROM n_reset_otps WHERE email = $1`, [email]);

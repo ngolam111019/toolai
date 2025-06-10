@@ -20,11 +20,12 @@ async function sendMail (to, subject, htmlContent) {
 
   await transporter.sendMail(mailOptions);
 }
-async function sendOtpEmail(to, otp) {
+
+async function sendOtpEmail(to, otp, subject) {
   const mailOptions = {
     from: `"Tool AI" <${process.env.EMAIL_USER}>`,
     to,
-    subject: 'Mã xác thực tài khoản của bạn',
+    subject: subject,
     html: `<p>Chào bạn,</p>
            <p>Mã OTP của bạn là: <strong>${otp}</strong></p>
            <p>Mã có hiệu lực trong 10 phút.</p>`
@@ -33,8 +34,7 @@ async function sendOtpEmail(to, otp) {
   return transporter.sendMail(mailOptions);
 }
 
-
-async function sendPasswordEmail(to, pass) {
+async function sendEmailDangKyThanhCong(to, pass) {
   const mailOptions = {
     from: `"Tool AI" <${process.env.EMAIL_USER}>`,
     to,
@@ -46,4 +46,16 @@ async function sendPasswordEmail(to, pass) {
   return transporter.sendMail(mailOptions);
 }
 
-module.exports = { sendOtpEmail, sendMail, sendPasswordEmail };
+async function sendEmailFogotPassword(to, newPassword) {
+  const mailOptions = {
+    from: `"Tool AI" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: 'Mật khẩu mới của bạn',
+    html: `<p>Mật khẩu mới của bạn là: <strong>${newPassword}</strong></p>
+          <p>Hãy đăng nhập và đổi lại mật khẩu ngay nhé!</p>`
+  };
+  
+  return transporter.sendMail(mailOptions);
+}
+
+module.exports = { sendMail, sendOtpEmail, sendEmailDangKyThanhCong, sendEmailFogotPassword };
