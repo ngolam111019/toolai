@@ -6,6 +6,7 @@ const SECRET = process.env.JWT_SECRET || 'mysecret';
 const {sendOtpEmail, sendEmailDangKyThanhCong, sendEmailFogotPassword } = require('../utils/mailer');
 const {sendPushNotificationToToken } = require('../utils/noti');
 const { sendDiscord } = require('../utils/discordNotify');
+const format = require('../utils/format');
 
 exports.login = async (req, res) => {
   const { email, password, device_id } = req.body;
@@ -53,14 +54,15 @@ exports.requestOtp = async (req, res) => {
     const userCheck = await db.query('SELECT id FROM n_users WHERE email = $1', [email]);
     if (userCheck.rows.length) return res.status(400).json({ message: 'Email đã được đăng ký' });
 
+    var now = format.getTodayVNDatetime();
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 phút
+    const expiresAt = new Date(now + 10 * 60 * 1000); // 10 phút
 
     await db.query(`
       INSERT INTO n_user_pending (email, otp, expires_at, verified, created_at)
-      VALUES ($1, $2, $3, false, NOW())
+      VALUES ($1, $2, $3, false, $4)
       ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, verified = false
-    `, [email, otp, expiresAt]);
+    `, [email, otp, expiresAt, now]);
 
     await sendOtpEmail(email, otp, 'Mã xác thực tài khoản của bạn');
 
@@ -76,10 +78,11 @@ exports.verifyOtp = async (req, res) => {
   if (!email || !otp) return res.status(400).json({ message: 'Thiếu email hoặc mã OTP' });
 
   try {
+    var now = format.getTodayVNDatetime();
     const { rows } = await db.query(`
       SELECT * FROM n_user_pending
-      WHERE email = $1 AND otp = $2 AND expires_at >= NOW()
-    `, [email, otp]);
+      WHERE email = $1 AND otp = $2 AND expires_at >= $3
+    `, [email, otp, now]);
 
     if (!rows.length) return res.status(400).json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
 
