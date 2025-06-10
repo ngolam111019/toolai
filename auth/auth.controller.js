@@ -56,12 +56,14 @@ exports.requestOtp = async (req, res) => {
 
     var now = format.getTodayVNDatetime();
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(now + 10 * 60 * 1000); // 10 phút
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 phút
+    console.log("now: " + now);
+    console.log("expiresAt: " + expiresAt);
 
     await db.query(`
       INSERT INTO n_user_pending (email, otp, expires_at, verified, created_at)
       VALUES ($1, $2, $3, false, $4)
-      ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, verified = false
+      ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, created_at = $4, verified = false
     `, [email, otp, expiresAt, now]);
 
     await sendOtpEmail(email, otp, 'Mã xác thực tài khoản của bạn');
@@ -84,6 +86,7 @@ exports.verifyOtp = async (req, res) => {
       WHERE email = $1 AND otp = $2 AND expires_at >= $3
     `, [email, otp, now]);
 
+    console.log("verifyOtp now: " + now);
     if (!rows.length) return res.status(400).json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
 
     await db.query(`UPDATE n_user_pending SET verified = true WHERE email = $1`, [email]);
