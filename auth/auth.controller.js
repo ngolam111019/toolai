@@ -12,9 +12,9 @@ const common = require('../utils/common');
 exports.login = async (req, res) => {
   const { email, password, device_id } = req.body;
 
-  if (common.isValidEmail(email)) 
+  if (!common.isValidEmail(email)) 
     return res.status(400).json({ message: 'Email sai định dạng' });
-  
+
   try {
     const userRes = await db.query('SELECT * FROM n_users WHERE email = $1', [email]);
     if (!userRes.rows.length) return res.status(404).json({ message: 'Tài khoản không tồn tại. Hãy đăng ký tài khoản' });
@@ -57,7 +57,7 @@ exports.requestOtp = async (req, res) => {
   if (!email) 
     return res.status(400).json({ message: 'Email không được để trống' });
 
-  if (common.isValidEmail(email)) 
+  if (!common.isValidEmail(email)) 
     return res.status(400).json({ message: 'Email sai định dạng' });
   
   try {
@@ -146,7 +146,7 @@ exports.requestReset = async (req, res) => {
   if (!email) 
     return res.status(400).json({ message: 'Email không được để trống' });
 
-  if (common.isValidEmail(email)) 
+  if (!common.isValidEmail(email)) 
     return res.status(400).json({ message: 'Email sai định dạng' });
 
   try {
