@@ -7,9 +7,14 @@ const {sendOtpEmail, sendEmailDangKyThanhCong, sendEmailFogotPassword } = requir
 const {sendPushNotificationToToken } = require('../utils/noti');
 const { sendDiscord } = require('../utils/discordNotify');
 const format = require('../utils/format');
+const common = require('../utils/common');
 
 exports.login = async (req, res) => {
   const { email, password, device_id } = req.body;
+
+  if (common.isValidEmail(email)) 
+    return res.status(400).json({ message: 'Email sai định dạng' });
+  
   try {
     const userRes = await db.query('SELECT * FROM n_users WHERE email = $1', [email]);
     if (!userRes.rows.length) return res.status(404).json({ message: 'Tài khoản không tồn tại. Hãy đăng ký tài khoản' });
@@ -48,7 +53,12 @@ exports.login = async (req, res) => {
 /* Start flow - đăng ký tài khoản */
 exports.requestOtp = async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ message: 'Email không được để trống' });
+  
+  if (!email) 
+    return res.status(400).json({ message: 'Email không được để trống' });
+
+  if (common.isValidEmail(email)) 
+    return res.status(400).json({ message: 'Email sai định dạng' });
   
   try {
     const userCheck = await db.query('SELECT id FROM n_users WHERE email = $1', [email]);
@@ -133,7 +143,11 @@ exports.confirmRegister = async (req, res) => {
 /* Start flow - Quên mật khẩu */
 exports.requestReset = async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ message: 'Email là bắt buộc' });
+  if (!email) 
+    return res.status(400).json({ message: 'Email không được để trống' });
+
+  if (common.isValidEmail(email)) 
+    return res.status(400).json({ message: 'Email sai định dạng' });
 
   try {
     // Kiểm tra email có tồn tại không
