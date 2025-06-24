@@ -8,6 +8,8 @@ const {sendPushNotificationToToken } = require('../utils/noti');
 const { sendDiscord } = require('../utils/discordNotify');
 const format = require('../utils/format');
 const common = require('../utils/common');
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 exports.login = async (req, res) => {
   const { email, password, device_id } = req.body;
@@ -27,6 +29,42 @@ exports.login = async (req, res) => {
     if (user.device_id && user.device_id !== device_id) {
       return res.status(403).json({ message: 'Thiết bị không hợp lệ. Tài khoản đã gắn với thiết bị khác.' });
     }
+    let userId = user.id;
+    // Nếu hết hạn và chưa dùng thử | dùng thử dưới 3 lượt 
+    let userPackages = await db.query('SELECT id, expired_at FROM n_user_packages WHERE user_id = $1 LIMIT 1', [userId]);
+    if (userPackages.rows.length > 0) {
+      var userPackage = userPackages.rows[0];
+      var now = format.getTodayVNDatetime();
+
+      console.log("now: " + now);
+      console.log("userPackage: " + userPackage.expired_at);
+      if(now > userPackage.expired_at){
+        //hết hạn
+        console.log("hết hạn");
+        const n_tool_usage_logs = await db.query(`
+          SELECT COUNT (*) trial_used
+          FROM public.n_tool_usage_logs
+          WHERE gateway = 'Zon88' and user_id = $1
+          GROUP BY user_id
+          LIMIT 1
+        `, [userId]);
+
+        // Chưa dùng thử hoặc dùng thử dưới 3 lượt
+        if(n_tool_usage_logs.rows.length < 3){
+          console.log("Chưa dùng thử hoặc dùng thử dưới 3 lượt");
+          await db.query(`
+            UPDATE n_user_packages 
+            SET expired_at = NOW() + interval '24 hours',
+              last_turn_reset = NOW()
+            WHERE id = $1`, 
+          [userPackage.id]);
+        }
+      }
+      else {
+        //còn hạn
+        console.log("còn hạn: " + userId);
+      }
+    }
 
     // nếu chưa có device_id → gắn thiết bị này
     // và gửi thông báo đăng nhập lần đầu
@@ -42,8 +80,8 @@ exports.login = async (req, res) => {
           });
     }
     
-    const token = jwt.sign({ id: user.id }, SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Đăng nhập thành công', token });
+    const token = jwt.sign({ id: user.id }, SECRET, { expiresIn: '30d' });
+    res.json({ message: 'Đăng nhập thành công', token, email, deviceId: device_id });
   } catch (err) {
     sendDiscord('error', `🚨 Lỗi hệ thống [login]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
     res.status(500).json({ message: 'Đăng nhập không thành công' });
@@ -67,8 +105,6 @@ exports.requestOtp = async (req, res) => {
     var now = format.getTodayVNDatetime();
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 phút
-    console.log("now: " + now);
-    console.log("expiresAt: " + expiresAt);
 
     await db.query(`
       INSERT INTO n_user_pending (email, otp, expires_at, verified, created_at)
@@ -76,9 +112,11 @@ exports.requestOtp = async (req, res) => {
       ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, created_at = $4, verified = false
     `, [email, otp, expiresAt, now]);
 
-    await sendOtpEmail(email, otp, 'Mã xác thực tài khoản của bạn');
-
     res.json({ message: 'OTP đã được gửi tới email của bạn' });
+
+    sendOtpEmail(email, otp, 'Mã xác thực tài khoản của bạn')
+      .catch(err => console.log("Lỗi gửi mail [requestOtp - đăng ký tài khoản]:", err.message));
+
   } catch (err) {
     console.log(err);
     sendDiscord('error', `🚨 Lỗi hệ thống [requestOtp - đăng ký tài khoản]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
@@ -108,10 +146,9 @@ exports.verifyOtp = async (req, res) => {
   }
 };
 exports.confirmRegister = async (req, res) => {
-  const { email, device_id } = req.body;
+  const { email, password, device_id } = req.body;
   try {
 
-    const password = Math.random().toString(36).slice(-8);
     const hashed = await bcrypt.hash(password, 10);
     const existing = await db.query('SELECT id FROM n_users WHERE email = $1', [email]);
     if (existing.rows.length) return res.status(400).json({ message: 'Email này đã được đăng ký' });
@@ -129,9 +166,10 @@ exports.confirmRegister = async (req, res) => {
 
     await db.query('DELETE FROM n_user_pending WHERE email = $1', [email]);
 
-    await sendEmailDangKyThanhCong(email, password);
-
-    res.json({ message: 'Đăng ký tài khoản thành công' });
+    const token = jwt.sign({ id: userRes.rows[0].id }, SECRET, { expiresIn: '30d' });
+    res.json({ message: 'Đăng ký tài khoản thành công', token, email, deviceId: device_id  });
+   
+    sendEmailDangKyThanhCong(email, password).catch(err => console.log("Lỗi gửi mail [confirmRegister - đăng ký tài khoản]:", err.message));
   } catch (err) {
     console.log(err);
     sendDiscord('error', `🚨 Lỗi hệ thống [confirmRegister - đăng ký tài khoản]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
@@ -295,3 +333,97 @@ exports.fcmToken = async (req, res) => {
     return res.status(500).json({ message: 'Lỗi cập nhật fcm_token' });
   }
 };
+
+exports.authGoogle = async (req, res) => {
+  const { idToken, deviceId } = req.body;
+  try {
+
+    const ticket = await client.verifyIdToken({
+      idToken,
+      aud: process.env.GOOGLE_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+    const email = payload.email;
+
+    // Check DB: nếu user chưa tồn tại thì tạo mới
+    let userId, isNew = false, password;
+    let user = await db.query('SELECT id, device_id FROM n_users WHERE email = $1', [email]);
+    
+    if (user.rows.length == 0) {
+      password = Math.random().toString(36).slice(-8);
+      const hashed = await bcrypt.hash(password, 10);
+      const userRes = await db.query(`
+        INSERT INTO n_users (email, password_hash, device_id) 
+        VALUES ($1, $2, $3) RETURNING id
+      `, [email, hashed, deviceId]);
+      userId = userRes.rows[0].id;
+
+      // gán gói dùng thử (package_id = 0)
+      await db.query(`
+        INSERT INTO n_user_packages (user_id, package_id, activated_at, expired_at, last_turn_reset)
+        VALUES ($1, 0, NOW(), NOW() + interval '24 hours', NOW())
+      `, [userId]);
+      isNew = true;
+    }
+    else {
+      var existUser = user.rows[0];
+      userId = existUser.id
+      
+      // Nếu hết hạn và chưa dùng thử | dùng thử dưới 3 lượt 
+      let userPackages = await db.query('SELECT id, expired_at FROM n_user_packages WHERE user_id = $1 LIMIT 1', [userId]);
+      if (userPackages.rows.length > 0) {
+        var userPackage = userPackages.rows[0];
+        var now = format.getTodayVNDatetime();
+
+        console.log("now: " + now);
+        console.log("userPackage: " + userPackage.expired_at);
+        if(now > userPackage.expired_at){
+          //hết hạn
+          console.log("hết hạn");
+          const n_tool_usage_logs = await db.query(`
+            SELECT COUNT (*) trial_used
+            FROM public.n_tool_usage_logs
+            WHERE gateway = 'Zon88' and user_id = $1
+            GROUP BY user_id
+            LIMIT 1
+          `, [userId]);
+
+          // Chưa dùng thử hoặc dùng thử dưới 3 lượt
+          if(n_tool_usage_logs.rows.length < 3){
+            console.log("Chưa dùng thử hoặc dùng thử dưới 3 lượt");
+            await db.query(`
+              UPDATE n_user_packages 
+              SET expired_at = NOW() + interval '24 hours',
+                last_turn_reset = NOW()
+              WHERE id = $1`, 
+            [userPackage.id]);
+          }
+        }
+        else {
+          //còn hạn
+          console.log("còn hạn: " + userId);
+        }
+      }
+
+      // kiểm tra device_id
+      if(!existUser.device_id) {
+        await db.query('UPDATE n_users SET device_id = $1 WHERE id = $2', [deviceId, userId]);
+      }
+      else if (existUser.device_id !== deviceId) {
+        return res.status(403).json({ message: 'Thiết bị không hợp lệ. Tài khoản đã gắn với thiết bị khác.' });
+      }
+
+
+    }
+
+    const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
+    res.json({ message: 'Đăng nhập thành công', token, email, deviceId});
+
+    if(isNew){
+      sendEmailDangKyThanhCong(email, password).catch(err => console.log("Lỗi gửi mail [confirmRegister - đăng ký tài khoản]:", err.message));
+    }
+  } catch (err) {
+    res.status(401).json({ error: err });
+  }
+}

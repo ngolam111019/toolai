@@ -7,12 +7,12 @@ exports.authMiddleware = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   const device_id = req.headers['x-device-id'];
 
-  if (!token || !device_id) return res.status(401).json({ message: 'Unauthorized' });
+  if (!token || !device_id) return res.status(401).json({ message: 'Lỗi xác thực' });
 
   try {
     const decoded = jwt.verify(token, SECRET);
     const userRes = await db.query('SELECT * FROM n_users WHERE id = $1', [decoded.id]);
-    if (!userRes.rows.length) return res.status(404).json({ message: 'User not found' });
+    if (!userRes.rows.length) return res.status(404).json({ message: 'Tài khoản không tồn tại' });
 
     const user = userRes.rows[0];
     if (user.device_id !== device_id) {

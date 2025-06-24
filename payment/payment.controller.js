@@ -15,12 +15,12 @@ const {sendPushNotificationToToken } = require('../utils/noti');
 const createPayment = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { amount } = req.body;
-
+    const { amount, package_id } = req.body;
+/*
     if (![100000, 200000, 300000, 500000, 1000000, 2000000].includes(amount)) {
       return res.status(400).json({ message: 'Số tiền không hợp lệ' });
     }
-
+*/
     const tranid = uuidv4();
     const expiredAt = new Date(Date.now() + 5 * 60 * 1000);
     const message = `uid${userId}-${tranid}`;
@@ -37,14 +37,15 @@ const createPayment = async (req, res) => {
     });
 
     
-    /*call api bên thứ 3*/
+    /*call api bên thứ 3
     const gbRes = await axios.get(gbUrl);
     if (gbRes.data?.code != 1) {
+      console.log("gbRes.data: "+ gbRes.data?.message);
       return res.status(500).json({ error: gbRes.data?.message || 'Tạo QR thất bại' });
-    }
+    }*/
     /*call api bên thứ 3 end*/
     /*giả lâp test*/
-    /*const gbRes = {
+    const gbRes = {
       data: {
         code: 1,
         message: 'Success',
@@ -55,18 +56,18 @@ const createPayment = async (req, res) => {
         phonenumber: '0877450226',
         content: 'RXWZYM'
       }
-    }
+    }/**/
     const raw = process.env.GB_USERNAME + process.env.GB_PASSWORD + amount + tranid + '9' + 'success';
     const computedSig = crypto.createHash('sha256').update(raw).digest('hex');
     console.log('signature: ' + computedSig);
-    console.log('tranid: ' + tranid);*/
+    console.log('tranid: ' + tranid);
     /*giả lâp test end*/
     
     // Ghi vào bảng n_transactions
     await db.query(`
-      INSERT INTO n_transactions (user_id, amount, type, status, reason, ref_code, expired_at)
-      VALUES ($1, $2, 'payment', 'pending', 'Nạp QR', $3, $4)
-    `, [userId, amount, tranid, expiredAt]);
+      INSERT INTO n_transactions (user_id, amount, type, status, reason, ref_code, expired_at, package_id)
+      VALUES ($1, $2, 'payment', 'pending', 'Nạp QR', $3, $4, $5)
+    `, [userId, amount, tranid, expiredAt, package_id]);
 
     var rs = {
       tranid,
@@ -184,21 +185,72 @@ const handlePaymentCallback = async (req, res) => {
     
       var totalAmount = parseInt(amount) + parseInt(bonusAmount);
       var title =  '✅ Nạp ' + format.formatWithUnit(amount,'Xu') + ' thành công. ';
-      var message = title + messageBonus;
-    
 
-      const resultIo = emitToRoom(tran_id, 'payment_result', {
+      var resultData = {
         is_success: true,
-        amount: totalAmount,
         tranid: tran_id,
-        message: message,
-        confirmed_at: new Date()
-      });
+        title,
+        message: title + messageBonus,
+        amount: totalAmount,
+        confirmed_at: new Date(),
+        btnText: "Xem lịch sử giao dịch", 
+        screen_redirect: "history",
+        oneClick: false
+      };
+
+      // [NÂNG CẤP] Nếu tx.package_id có dữ liệu thì nâng cấp luôn
+      if (tx.package_id && tx.package_id > 0) {
+        // B1: Lấy gói cần nâng cấp
+        const { rows } = await db.query(`SELECT * FROM n_packages WHERE id = $1`, [tx.package_id]);
+        if (!rows.length) return res.status(400).json({ message: 'Gói không tồn tại' });
+
+        const pkg = rows[0];
+        const price = pkg.price;
+        const isLifetime = pkg.is_lifetime;
+        const duration = pkg.duration_days;
+
+        // B2: Lấy số dư user
+        const userRes = await db.query(`SELECT balance_xu FROM n_users WHERE id = $1`, [tx.user_id]);
+        const currentBalance = userRes.rows[0]?.balance_xu || 0;
+
+        if (currentBalance < price) {
+          return res.status(400).json({ message: 'Không đủ Xu để nâng cấp' });
+        }
+
+        // B3: Trừ Xu
+        await db.query(`UPDATE n_users SET balance_xu = balance_xu - $1 WHERE id = $2`, [price, tx.user_id]);
+
+        // B4: Ghi log vào n_transactions
+        await db.query(`
+          INSERT INTO n_transactions (user_id, amount, type, status, reason, ref_code)
+          VALUES ($1, $2, 'purchase', 'success', $3, $4)
+        `, [tx.user_id, -price, `Mua ${pkg.name}`, `pkg_${pkg.id}`]);
+
+        // B5: Huỷ gói cũ nếu chỉ dùng 1 gói
+        await db.query(`DELETE FROM n_user_packages WHERE user_id = $1`, [tx.user_id]);
+
+        // B6: Tính hạn dùng
+        const expiredAt = isLifetime
+          ? '9999-12-31'
+          : new Date(Date.now() + duration * 86400 * 1000);
+
+        // B7: Ghi bản ghi mới vào n_user_packages
+        await db.query(`
+          INSERT INTO n_user_packages (user_id, package_id, turns_used_today, last_turn_reset, expired_at)
+          VALUES ($1, $2, 0, NOW(), $3)
+        `, [tx.user_id, pkg.id, expiredAt]);
+
+        resultData.message = resultData.message + '\n📦 Nâng cấp thành công ' + pkg.name + ' (-'+format.formatWithUnit(price,'Xu')+')';
+        resultData.oneClick = true;
+      }
+ 
+      // Gửi thông báo hoặc socket cho user
+      const resultIo = emitToRoom(tran_id, 'payment_result', resultData);
 
       if (!resultIo && fcm_token) {
         var data = {
             title: title,
-            message: `Mã giao dịch: ` + tran_id + `\n ` + message,
+            message: `Mã giao dịch: ` + tran_id + `\n ` + resultData.message,
             btnText: "Xem lịch sử giao dịch", 
             screen_redirect: "history"
           }
@@ -206,9 +258,9 @@ const handlePaymentCallback = async (req, res) => {
         sendPushNotificationToToken(fcm_token, data);
       } 
 
-      sendDiscord('payment', null, {
+      sendDiscord(resultData.oneClick ? 'upgrade' : 'payment', null, {
         title: title,
-        description: `Mã giao dịch: ` + tran_id + `\n ` + message,
+        description: `Mã giao dịch: ` + tran_id + `\n ` + resultData.message,
         color: 0x00FF00
       });
       return res.json({ ok: true });

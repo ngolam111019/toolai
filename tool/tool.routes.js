@@ -6,5 +6,6 @@ const { checkToolUsageLimit } = require('./tool.middleware');
 
 
 router.post('/use', authMiddleware, checkToolUsageLimit, controller.useTool);
+router.get('/use', authMiddleware, controller.useTool);
 
 module.exports = router;

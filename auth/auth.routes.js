@@ -12,5 +12,6 @@ router.post('/verify-reset', controller.verifyResetOtp);
 router.post('/send-new-password', controller.sendNewPassword);
 router.post('/change-password', authMiddleware, controller.changePassword);
 router.post('/fcm-token', authMiddleware, controller.fcmToken);
+router.post('/google', controller.authGoogle);
 
 module.exports = router;

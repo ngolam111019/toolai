@@ -5,7 +5,7 @@ const { sendDiscord } = require('../utils/discordNotify');
 async function getPackages(req, res) {
   try {
     const result = await db.query(`
-      SELECT id, name, price, duration_days, gateways, description, color, bg_color, is_best_saler, max_turns_per_day, is_gift
+      SELECT id, name, price, price_2, duration_days, gateways, description, color, bg_color, is_best_saler, max_turns_per_day, is_gift
       FROM n_packages
       WHERE id > 0
       ORDER BY id ASC
@@ -89,6 +89,10 @@ async function getPackageStatus(req, res) {
   try {
     const userId = req.user.id;
 
+    
+    let expiredMessage = '';
+    let expiredAt = null;
+    let trial_used = 0, is_used_trial = false;
     // Lấy gói đang sử dụng (gói còn hạn)
     const { rows } = await db.query(`
       SELECT up.*, p.name, p.max_turns_per_day, p.gateways
@@ -99,10 +103,20 @@ async function getPackageStatus(req, res) {
       ORDER BY up.expired_at DESC
       LIMIT 1
     `, [userId]);
-    
-  let expiredMessage = '';
-  let expiredAt = null;
 
+    const n_tool_usage_logs = await db.query(`
+      SELECT COUNT (*) trial_used
+      FROM public.n_tool_usage_logs
+      WHERE gateway = 'Zon88' and user_id = $1
+      GROUP BY user_id
+      LIMIT 1
+    `, [userId]);
+
+    if(n_tool_usage_logs.rows.length > 0){
+      const usage_log = n_tool_usage_logs.rows[0];
+      trial_used = usage_log.trial_used;
+      is_used_trial = true;
+    }
 
     if (!rows.length) {
       return res.json({
@@ -115,7 +129,9 @@ async function getPackageStatus(req, res) {
           gateways:[]
         },
         xu: req.user.balance_xu || 0,
-        email: req.user.email
+        email: req.user.email,
+        is_used_trial,
+        trial_used
       });
     }
     else{
@@ -140,6 +156,8 @@ async function getPackageStatus(req, res) {
       },
       xu: req.user.balance_xu | 0,
       email: req.user.email,
+      is_used_trial,
+      trial_used
     });
 
   } catch (err) {
