@@ -180,6 +180,9 @@ const handlePaymentCallback = async (req, res) => {
           VALUES ($1, $2, 'bonus', 'success', 'Tặng thêm khi nạp 2 triệu', $3)
         `, [tx.user_id, bonusAmount, tx.ref_code]); // ref_code = tranid
 
+        // Cộng Xu vào tài khoản
+        await db.query(`UPDATE n_users SET balance_xu = balance_xu + $1 WHERE id = $2`, [bonusAmount, tx.user_id]);
+        
         messageBonus = "Được tặng thêm " + format.formatWithUnit(bonusAmount,'Xu') + " vào tài khoản."
       }
     
