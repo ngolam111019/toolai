@@ -9,7 +9,8 @@ router.get('/gateways', async (req, res) => {
     const result = await db.query(`
       SELECT id, name, display_name, logo
       FROM n_gateways
-      ORDER BY id ASC
+      where visible = true
+      ORDER BY "order" ASC
     `);
     res.json(result.rows);
   } catch (err) {

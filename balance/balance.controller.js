@@ -6,7 +6,7 @@ async function getBalanceLogs(req, res) {
     const userId = req.user.id;
 
     const { rows } = await db.query(`
-      SELECT amount, type, status, reason, ref_code, created_at
+      SELECT id, amount, type, status, reason, ref_code, created_at
       FROM n_transactions
       WHERE user_id = $1
       ORDER BY created_at DESC

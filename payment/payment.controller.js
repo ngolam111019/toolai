@@ -191,7 +191,7 @@ const handlePaymentCallback = async (req, res) => {
       }
     
       var totalAmount = parseInt(amount) + parseInt(bonusAmount);
-      var title =  '✅ Nạp ' + format.formatWithUnit(amount,'Xu') + ' thành công. ';
+      var title =  '✅ Nạp ' + format.formatWithUnit(parseInt(amount),'Xu') + ' thành công. ';
 
       var resultData = {
         is_success: true,
