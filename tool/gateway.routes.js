@@ -7,7 +7,7 @@ const { sendDiscord } = require('../utils/discordNotify');
 router.get('/gateways', async (req, res) => {
   try {
     const result = await db.query(`
-      SELECT id, name, display_name, logo
+      SELECT id, name, display_name, logo, link_video, link_channel
       FROM n_gateways
       where visible = true
       ORDER BY "order" ASC
