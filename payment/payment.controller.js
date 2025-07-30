@@ -7,7 +7,7 @@ const querystring = require('querystring');
 const crypto = require('crypto');
 const { emitToRoom } = require('../socket/socket');
 const { v4: uuidv4 } = require('uuid');
-const {sendPushNotificationToToken } = require('../utils/noti');
+const {pushNoti } = require('../utils/noti');
 
 // ==============================
 // POST /payment/create
@@ -126,8 +126,8 @@ const handlePaymentCallback = async (req, res) => {
     const tx = rows[0];
     
     // Gửi socket về client
-    const userRes = await db.query(`SELECT fcm_token FROM n_users WHERE id = $1`, [tx.user_id]);
-    const fcm_token = userRes.rows[0]?.fcm_token || "";
+    const userRes = await db.query(`SELECT platform, fcm_token, web_push_subscription FROM n_users WHERE id = $1`, [tx.user_id]);
+    const _user = userRes.rows[0];
     if (errorcode !== "9") {
       // Nếu là thất bại
       await db.query(`
@@ -148,7 +148,7 @@ const handlePaymentCallback = async (req, res) => {
         confirmed_at: new Date()
       });
 
-      if (!resultIo && fcm_token) {
+      if (!resultIo) {
         var data = {
             title: title,
             message: `Mã giao dịch: ` + tran_id + `\n ` + message,
@@ -157,7 +157,7 @@ const handlePaymentCallback = async (req, res) => {
           }
 
         // Không ai còn trong room, gửi FCM thay thế
-        sendPushNotificationToToken(fcm_token, data);
+        pushNoti(_user, data);
       } 
 
       return res.status(400).json({ code: 0, message: messages });
@@ -254,7 +254,7 @@ const handlePaymentCallback = async (req, res) => {
       // Gửi thông báo hoặc socket cho user
       const resultIo = emitToRoom(tran_id, 'payment_result', resultData);
 
-      if (!resultIo && fcm_token) {
+      if (!resultIo) {
         var data = {
             title: title,
             message: `Mã giao dịch: ` + tran_id + `\n ` + resultData.message,
@@ -262,7 +262,7 @@ const handlePaymentCallback = async (req, res) => {
             screen_redirect: "history"
           }
         // Không ai còn trong room, gửi FCM thay thế
-        sendPushNotificationToToken(fcm_token, data);
+        pushNoti(_user, data);
       } 
 
       sendDiscord(resultData.oneClick ? 'upgrade' : 'payment', null, {

@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const { sendWebPushNotification } = require('./webPushHelper');
 
 async function sendPushNotificationToToken(token, data) {
   const message = {
@@ -14,6 +15,19 @@ async function sendPushNotificationToToken(token, data) {
   }
 }
 
+async function pushNoti(user, data){
+  console.log(user);
+  if(user) {
+    if(user.platform == 0 && user.fcm_token){
+      await sendPushNotificationToToken(user.fcm_token, data);
+    }
+    
+    if(user.platform == 1 && user.web_push_subscription) {
+      await sendWebPushNotification (user.web_push_subscription, data);
+    }
+  }
+}
+
 module.exports = {
-    sendPushNotificationToToken
+    pushNoti
 };

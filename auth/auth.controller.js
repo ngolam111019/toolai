@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const SECRET = process.env.JWT_SECRET || 'mysecret';
 const {sendOtpEmail, sendEmailDangKyThanhCong, sendEmailFogotPassword } = require('../utils/mailer');
-const {sendPushNotificationToToken } = require('../utils/noti');
+const { pushNoti } = require('../utils/noti');
 const { sendDiscord } = require('../utils/discordNotify');
 const format = require('../utils/format');
 const common = require('../utils/common');
@@ -71,7 +71,7 @@ exports.login = async (req, res) => {
     if (!user.device_id) {
       await db.query('UPDATE n_users SET device_id = $1 WHERE id = $2', [device_id, user.id]);
 
-      sendPushNotificationToToken(user.fcm_token,
+      pushNoti(user,
           {
             title: "Bạn có 5 lượt dùng thử miễn phí", 
             message: "Bạn có 5 lượt dùng thử miễn phí cho cổng game Zon88 trong 24h. Thử ngay để thấy độ chính xác của Tool AI nhé!",
@@ -425,5 +425,24 @@ exports.authGoogle = async (req, res) => {
     }
   } catch (err) {
     res.status(401).json({ error: err });
+  }
+}
+
+exports.saveWebSubscription = async (req, res) => {
+try {
+    const userId = req.user.id;
+    const { subscription } = req.body;
+
+    await db.query(`
+      UPDATE n_users 
+      SET web_push_subscription = $1,
+          platform = $2
+      WHERE id = $3
+    `, [subscription, 1, userId]);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Lỗi lưu web push subscription:', err);
+    res.status(500).json({ error: 'Lỗi server' });
   }
 }

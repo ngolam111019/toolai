@@ -10,7 +10,7 @@ async function useTool(req, res) {
 
     // (0) Kiểm tra quyền truy cập
     if (req.pkg?.allowed_gateways?.includes && !req.pkg.allowed_gateways.includes(gateway)) {
-      return res.status(403).json({ message: 'Cổng này không thuộc gói bạn đang dùng' });
+      return res.status(403).json({ message: 'Cổng này không thuộc gói bạn đang dùng. Vui lòng nâng cấp gói cao hơn.' });
     }
 
     const userPackageId = req.pkg?.id;
