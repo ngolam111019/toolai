@@ -352,6 +352,7 @@ exports.authGoogle = async (req, res) => {
     const payload = ticket.getPayload();
     const email = payload.email;
 
+    console.log('ticket.getPayload()');
     // Check DB: nếu user chưa tồn tại thì tạo mới
     let userId, isNew = false, password;
     let user = await db.query('SELECT id, device_id FROM n_users WHERE email = $1', [email]);
