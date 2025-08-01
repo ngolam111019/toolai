@@ -424,6 +424,7 @@ exports.authGoogle = async (req, res) => {
       sendEmailDangKyThanhCong(email, password).catch(err => console.log("Lỗi gửi mail [confirmRegister - đăng ký tài khoản]:", err.message));
     }
   } catch (err) {
+    console.log("đănh nhập GG: " + err);
     res.status(401).json({ error: err });
   }
 }
