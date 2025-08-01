@@ -335,6 +335,8 @@ exports.fcmToken = async (req, res) => {
 
 exports.authGoogle = async (req, res) => {
   const { idToken, deviceId, platform } = req.body;
+  console.log('req.body');
+  console.log(req.body);
   try {
     var googleClientId = process.env.GOOGLE_CLIENT_ID;
     if (platform == 1){
