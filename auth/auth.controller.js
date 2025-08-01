@@ -335,7 +335,7 @@ exports.fcmToken = async (req, res) => {
 
 exports.authGoogle = async (req, res) => {
   const { idToken, deviceId, platform } = req.body;
-  console.log('req.body');
+  console.log('1. req.body');
   console.log(req.body);
   try {
     var googleClientId = process.env.GOOGLE_CLIENT_ID;
@@ -352,12 +352,13 @@ exports.authGoogle = async (req, res) => {
     const payload = ticket.getPayload();
     const email = payload.email;
 
-    console.log('ticket.getPayload()');
+    console.log('2. ticket.getPayload()');
     // Check DB: nếu user chưa tồn tại thì tạo mới
     let userId, isNew = false, password;
     let user = await db.query('SELECT id, device_id FROM n_users WHERE email = $1', [email]);
     
     if (user.rows.length == 0) {
+      console.log('3. Tạo user');
       password = Math.random().toString(36).slice(-8);
       const hashed = await bcrypt.hash(password, 10);
       const userRes = await db.query(`
@@ -374,6 +375,7 @@ exports.authGoogle = async (req, res) => {
       isNew = true;
     }
     else {
+      console.log('4. user đã có');
       var existUser = user.rows[0];
       userId = existUser.id
       
@@ -412,7 +414,7 @@ exports.authGoogle = async (req, res) => {
           console.log("còn hạn: " + userId);
         }
       }
-
+      console.log('5. !existUser.device_id');
       // kiểm tra device_id
       if(!existUser.device_id) {
         await db.query('UPDATE n_users SET device_id = $1 WHERE id = $2', [deviceId, userId]);
@@ -427,9 +429,12 @@ exports.authGoogle = async (req, res) => {
     const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
     res.json({ message: 'Đăng nhập thành công', token, email, deviceId});
 
+    console.log('6. sendEmailDangKyThanhCong');
     if(isNew){
       sendEmailDangKyThanhCong(email, password).catch(err => console.log("Lỗi gửi mail [confirmRegister - đăng ký tài khoản]:", err.message));
     }
+
+    console.log('7. end sendEmailDangKyThanhCong');
   } catch (err) {
     console.log("đănh nhập GG: " + err);
     res.status(401).json({ error: err });
