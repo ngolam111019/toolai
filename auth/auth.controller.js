@@ -9,7 +9,6 @@ const { sendDiscord } = require('../utils/discordNotify');
 const format = require('../utils/format');
 const common = require('../utils/common');
 const { OAuth2Client } = require('google-auth-library');
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 exports.login = async (req, res) => {
   const { email, password, device_id } = req.body;
@@ -335,12 +334,17 @@ exports.fcmToken = async (req, res) => {
 };
 
 exports.authGoogle = async (req, res) => {
-  const { idToken, deviceId } = req.body;
+  const { idToken, deviceId, platform } = req.body;
   try {
+    var googleClientId = process.env.GOOGLE_CLIENT_ID;
+    if (platform == 1){
+      googleClientId = process.env.GOOGLE_CLIENT_ID_WEB_APP;
+    }
 
+    const client = new OAuth2Client(googleClientId);
     const ticket = await client.verifyIdToken({
       idToken,
-      aud: process.env.GOOGLE_CLIENT_ID
+      aud: googleClientId
     });
 
     const payload = ticket.getPayload();
