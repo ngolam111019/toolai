@@ -459,3 +459,42 @@ try {
     res.status(500).json({ error: 'Lỗi server' });
   }
 }
+
+exports.checkToken = async (req, res) => {
+  try {
+    // Lấy token & device_id từ header
+    const token = req.headers.authorization?.split(" ")[1];
+    const device_id = req.headers["x-device-id"];
+
+    if (!token) 
+      return res.status(401).json({ valid: false, message: "Thiếu token" });
+    if (!device_id) 
+      return res.status(401).json({ valid: false, message: "Thiếu device_id" });
+
+    // Giải mã token
+    const decoded = jwt.verify(token, SECRET);
+    if (!decoded?.id) 
+      return res.status(401).json({ valid: false, message: "Token không hợp lệ" });
+
+    // Kiểm tra user có tồn tại & thiết bị có khớp không
+    const { rows } = await db.query(`SELECT email, device_id FROM n_users WHERE id = $1`, [decoded.id]);
+    if (!rows.length)
+      return res.status(404).json({ valid: false, message: "Tài khoản không tồn tại" });
+
+    const user = rows[0];
+    if (user.device_id && user.device_id !== device_id) {
+      return res.status(403).json({ valid: false, message: "Thiết bị không hợp lệ" });
+    }
+
+    // Token hợp lệ + thiết bị hợp lệ
+    return res.json({
+      valid: true,
+      message: "Token hợp lệ",
+      email: user.email,
+      deviceId: user.device_id
+    });
+  } catch (err) {
+    console.log("checkToken error:", err.message);
+    return res.status(401).json({ valid: false, message: "Token hết hạn hoặc không hợp lệ" });
+  }
+};

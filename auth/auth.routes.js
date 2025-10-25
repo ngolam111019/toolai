@@ -14,5 +14,6 @@ router.post('/change-password', authMiddleware, controller.changePassword);
 router.post('/fcm-token', authMiddleware, controller.fcmToken);
 router.post('/google', controller.authGoogle);
 router.post('/save-web-subscription', authMiddleware, controller.saveWebSubscription);
+router.post('/check-token', controller.checkToken);
 
 module.exports = router;
