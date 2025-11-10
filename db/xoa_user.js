@@ -36,6 +36,8 @@ const emailToDelete = 'ngothanhlamit@gmail.com';
     // Xóa dữ liệu liên quan
     await client.query('DELETE FROM public.n_user_packages WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM public.n_transactions WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM public.n_notifications_queue WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM public.n_user_event_logs WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM public.n_tool_usage_logs WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM public.n_users WHERE id = $1', [userId]);
 

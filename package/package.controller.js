@@ -64,10 +64,32 @@ async function upgradePackage(req, res) {
       VALUES ($1, $2, 0, NOW(), $3)
     `, [userId, pkg.id, expiredAt]);
 
+    var eventCode;
+    switch (pkg.id) {
+      case 1:
+        eventCode = 'ON_UPGRADE_TRIAL_PRO'
+        break;
+      case 2:
+        eventCode = 'ON_UPGRADE_PREMIUM'
+        break;
+      case 3:
+        eventCode = 'ON_PREMIUM_PRO_INACTIVE'
+        break;
+      default:
+        eventCode = 'ON_SIGNUP'
+    }
 
-    sendDiscord('upgrade', null, {
-      title: '📦 Nâng cấp thành công ' + pkg.name,
-      description: `**User_Id:** `+ userId + `\n **Price:** ` + format.formatWithUnit(price,'đ'),
+    // ghi log
+    await db.query(`
+      INSERT INTO n_user_event_logs (user_id, event_code) 
+      VALUES ($1, $2)
+    `, [userId, eventCode]);
+
+    var {t, d, type} = format.titleDescTypeSenDiscord(true, userId, pkg.name, parseInt(price), req.user.platform, null);
+    
+    sendDiscord(type, null, {
+      title: t,
+      description: d,
       color: 0xFFD700
     });
 
@@ -89,7 +111,7 @@ async function getPackageStatus(req, res) {
   try {
     const userId = req.user.id;
 
-    
+
     let expiredMessage = '';
     let expiredAt = null;
     let trial_used = 0, is_used_trial = false;
@@ -112,7 +134,7 @@ async function getPackageStatus(req, res) {
       LIMIT 1
     `, [userId]);
 
-    if(n_tool_usage_logs.rows.length > 0){
+    if (n_tool_usage_logs.rows.length > 0) {
       const usage_log = n_tool_usage_logs.rows[0];
       trial_used = usage_log.trial_used;
       is_used_trial = true;
@@ -126,7 +148,7 @@ async function getPackageStatus(req, res) {
           max_turns_per_day: 0,
           turns_used_today: 0,
           expired_at: null,
-          gateways:[]
+          gateways: []
         },
         xu: req.user.balance_xu || 0,
         email: req.user.email,
@@ -134,7 +156,7 @@ async function getPackageStatus(req, res) {
         trial_used
       });
     }
-    else{
+    else {
       const last = rows[0];
       expiredAt = last.expired_at;
       expiredMessage = `Đã hết hạn vào ngày ${new Date(expiredAt).toLocaleDateString('vi-VN')}`;
@@ -143,7 +165,7 @@ async function getPackageStatus(req, res) {
     const row = rows[0];
 
     console.log(row);
-    
+
     return res.json({
       package: {
         id: row.package_id,

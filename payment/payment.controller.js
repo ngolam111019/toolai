@@ -7,7 +7,7 @@ const querystring = require('querystring');
 const crypto = require('crypto');
 const { emitToRoom } = require('../socket/socket');
 const { v4: uuidv4 } = require('uuid');
-const {pushNoti } = require('../utils/noti');
+const { pushNoti } = require('../utils/noti');
 
 // ==============================
 // POST /payment/create
@@ -16,16 +16,16 @@ const createPayment = async (req, res) => {
   try {
     const userId = req.user.id;
     const { amount, package_id } = req.body;
-/*
-    if (![100000, 200000, 300000, 500000, 1000000, 2000000].includes(amount)) {
-      return res.status(400).json({ message: 'Số tiền không hợp lệ' });
-    }
-*/
+    /*
+        if (![100000, 200000, 300000, 500000, 1000000, 2000000].includes(amount)) {
+          return res.status(400).json({ message: 'Số tiền không hợp lệ' });
+        }
+    */
     const tranid = uuidv4();
     const expiredAt = new Date(Date.now() + 5 * 60 * 1000);
     const message = `uid${userId}-${tranid}`;
     let gbRes;
-    if (process.env.IS_PAYMENT_API_DEMO == 1){
+    if (process.env.IS_PAYMENT_API_DEMO == 1) {
       /*giả lâp test*/
       gbRes = {
         data: {
@@ -57,16 +57,16 @@ const createPayment = async (req, res) => {
         message
       });
 
-      
+
       /*call api bên thứ 3*/
       gbRes = await axios.get(gbUrl);
       if (gbRes.data?.code != 1) {
-        console.log("gbRes.data: "+ gbRes.data?.message);
+        console.log("gbRes.data: " + gbRes.data?.message);
         return res.status(500).json({ error: gbRes.data?.message || 'Tạo QR thất bại' });
       }
       /*call api bên thứ 3 end*/
     }
-    
+
     // Ghi vào bảng n_transactions
     await db.query(`
       INSERT INTO n_transactions (user_id, amount, type, status, reason, ref_code, expired_at, package_id)
@@ -124,7 +124,7 @@ const handlePaymentCallback = async (req, res) => {
     if (!rows.length) return res.status(404).json({ code: 0, message: 'Giao dịch không hợp lệ hoặc đã xử lý' });
 
     const tx = rows[0];
-    
+
     // Gửi socket về client
     const userRes = await db.query(`SELECT platform, fcm_token, web_push_subscription FROM n_users WHERE id = $1`, [tx.user_id]);
     const _user = userRes.rows[0];
@@ -137,7 +137,7 @@ const handlePaymentCallback = async (req, res) => {
       `, [tx.id]);
 
 
-      var title =  '❌ Nạp ' + format.formatWithUnit(amount,'Xu') + ' thất bại. ';
+      var title = '❌ Nạp ' + format.formatWithUnit(amount, 'Xu') + ' thất bại. ';
       var message = title + '\n Trạng thái: ' + messages;
 
       const resultIo = emitToRoom(tran_id, 'payment_result', {
@@ -150,19 +150,19 @@ const handlePaymentCallback = async (req, res) => {
 
       if (!resultIo) {
         var data = {
-            title: title,
-            message: `Mã giao dịch: ` + tran_id + `\n ` + message,
-            btnText: "Xem lịch sử giao dịch", 
-            screen_redirect: "history"
-          }
+          title: title,
+          message: `Mã giao dịch: ` + tran_id + `\n ` + message,
+          btnText: "Xem lịch sử giao dịch",
+          screen_redirect: "history"
+        }
 
         // Không ai còn trong room, gửi FCM thay thế
         pushNoti(_user, data);
-      } 
+      }
 
       return res.status(400).json({ code: 0, message: messages });
     }
-    else{
+    else {
       const bonusAmount = (amount == 2000000) ? 500000 : 0;
       let messageBonus = "";
 
@@ -187,11 +187,12 @@ const handlePaymentCallback = async (req, res) => {
         // Cộng Xu vào tài khoản
         await db.query(`UPDATE n_users SET balance_xu = balance_xu + $1 WHERE id = $2`, [bonusAmount, tx.user_id]);
 
-        messageBonus = "Được tặng thêm " + format.formatWithUnit(bonusAmount,'Xu') + " vào tài khoản."
+        messageBonus = "Được tặng thêm " + format.formatWithUnit(bonusAmount, 'Xu') + " vào tài khoản."
       }
-    
+
       var totalAmount = parseInt(amount) + parseInt(bonusAmount);
-      var title =  '✅ Nạp ' + format.formatWithUnit(parseInt(amount),'Xu') + ' thành công. ';
+      var title = '✅ Nạp ' + format.formatWithUnit(parseInt(amount), 'Xu') + ' thành công. ';
+      var tileDiscord, descDiscord, typeDiscord;
 
       var resultData = {
         is_success: true,
@@ -200,7 +201,7 @@ const handlePaymentCallback = async (req, res) => {
         message: title + messageBonus,
         amount: totalAmount,
         confirmed_at: new Date(),
-        btnText: "Xem lịch sử giao dịch", 
+        btnText: "Xem lịch sử giao dịch",
         screen_redirect: "history",
         oneClick: false
       };
@@ -247,27 +248,60 @@ const handlePaymentCallback = async (req, res) => {
           VALUES ($1, $2, 0, NOW(), $3)
         `, [tx.user_id, pkg.id, expiredAt]);
 
-        resultData.message = resultData.message + '\n📦 Nâng cấp thành công ' + pkg.name + ' (-'+format.formatWithUnit(price,'Xu')+')';
+        var eventCode;
+        switch (pkg.id) {
+          case 1:
+            eventCode = 'ON_UPGRADE_TRIAL_PRO'
+            break;
+          case 2:
+            eventCode = 'ON_UPGRADE_PREMIUM'
+            break;
+          case 3:
+            eventCode = 'ON_PREMIUM_PRO_INACTIVE'
+            break;
+          default:
+            eventCode = 'ON_SIGNUP'
+        }
+
+        // ghi log
+        await db.query(`
+          INSERT INTO n_user_event_logs (user_id, event_code) 
+          VALUES ($1, $2)
+        `, [tx.user_id, eventCode]);
+
+        resultData.message = resultData.message + '\n📦 Nâng cấp thành công ' + pkg.name + ' (-' + format.formatWithUnit(price, 'Xu') + ')';
         resultData.oneClick = true;
+
+        var {t, d, type} = format.titleDescTypeSenDiscord(true, tx.user_id, pkg.name, price, _user.platform, tran_id);
+        tileDiscord = t;
+        descDiscord = d;
+        typeDiscord = type;
       }
- 
+
       // Gửi thông báo hoặc socket cho user
       const resultIo = emitToRoom(tran_id, 'payment_result', resultData);
 
       if (!resultIo) {
         var data = {
-            title: title,
-            message: `Mã giao dịch: ` + tran_id + `\n ` + resultData.message,
-            btnText: "Xem lịch sử giao dịch", 
-            screen_redirect: "history"
-          }
+          title: title,
+          message: `Mã giao dịch: ` + tran_id + `\n ` + resultData.message,
+          btnText: "Xem lịch sử giao dịch",
+          screen_redirect: "history"
+        }
         // Không ai còn trong room, gửi FCM thay thế
         pushNoti(_user, data);
-      } 
+      }
 
-      sendDiscord(resultData.oneClick ? 'upgrade' : 'payment', null, {
-        title: title,
-        description: `Mã giao dịch: ` + tran_id + `\n ` + resultData.message,
+      if (!resultData.oneClick) {
+        var {t, d, type} = format.titleDescTypeSenDiscord(resultData.oneClick, tx.user_id, null, amount, _user.platform, tran_id);
+        tileDiscord = t;
+        descDiscord = d;
+        typeDiscord = type;
+      }
+
+      sendDiscord(typeDiscord, null, {
+        title: tileDiscord,
+        description: descDiscord,
         color: 0x00FF00
       });
       return res.json({ ok: true });
