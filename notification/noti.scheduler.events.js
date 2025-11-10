@@ -95,7 +95,7 @@ async function cancelOldFlow(userId, newEvent) {
 }
 
 // Cron 10 phút
-cron.schedule('* * * * *', scheduleNotificationsFromEvents, {
+cron.schedule('*/10 * * * *', scheduleNotificationsFromEvents, {
   timezone: 'Asia/Ho_Chi_Minh',
 });
 
