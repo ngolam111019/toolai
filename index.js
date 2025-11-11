@@ -25,6 +25,7 @@ const packageRoutes = require('./package/package.routes');
 const gatewayRoutes = require('./tool/gateway.routes');
 const balanceRoutes = require('./balance/balance.routes');
 const usageLogsRoutes = require('./usagelogs/usagelog.routes');
+const notiRoutes = require('./notification/noti.routes');
 require('./notification/noti.scheduler.events');
 require('./notification/noti.sender');
 
@@ -40,7 +41,7 @@ app.use('/api/package', packageRoutes);
 app.use('/api/gateway', gatewayRoutes);
 app.use('/api/balance', balanceRoutes);
 app.use('/api/usagelog', usageLogsRoutes);
-//app.use('/api/noti', notiRoutes);
+app.use('/api/noti', notiRoutes);
 
 // Health check
 app.get('/', (req, res) => {

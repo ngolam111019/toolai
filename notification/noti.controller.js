@@ -73,8 +73,8 @@ async function testNoti(req, res) {
       title: 'Bạn có 5 lượt dùng thử miễn phí',
       message:
         'Bạn có 5 lượt dùng thử miễn phí cho cổng game Zon88 trong 24h. Thử ngay để thấy độ chính xác của Tool AI nhé!',
-      btnText: 'Thử ngay',
-      screen_redirect: 'tool',
+      btnText: 'Nâng cấp ngay',
+      screen_redirect: 'package',
     };
     pushNoti(req.user, _data);
     res.status(200).json({ message: 'Test thành công' });
