@@ -4,7 +4,8 @@ const roomSockets = new Map(); // Map<tranid, Set<socketId>>
 function initSocket(server) {
   const { Server } = require('socket.io');
   io = new Server(server, {
-    cors: { origin: "*" }
+    cors: { origin: "*" },
+    path: "/socket.io/"  // quan trọng, khớp client
   });
 
   io.on('connection', (socket) => {
