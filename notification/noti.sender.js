@@ -24,6 +24,7 @@ async function sendPendingNotifications() {
             LIMIT 50
             `);
 
+        console.log('[before Sender]: ', notis.rows);
         for (const noti of notis.rows) {
             try {
                 await pushNoti(
@@ -32,9 +33,11 @@ async function sendPendingNotifications() {
                 );
 
                 await db.query(`UPDATE n_notifications_queue SET status=1, sent_at=NOW() WHERE id=$1`, [noti.id]);
+
+                console.log('[Sender]: ', noti);
             } catch (err) {
                 await db.query(`UPDATE n_notifications_queue SET status=2, retry_count=retry_count+1 WHERE id=$1`, [noti.id]);
-                console.error('❌ [Sender] Push lỗi:', err.message);
+                console.error('❌ [Sender] Push lỗi: ', err.message);
             }
         }
 
