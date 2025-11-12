@@ -48,22 +48,10 @@ async function sendPendingNotifications() {
     // 3️⃣ Gửi từng noti (chỉ đúng kênh user đang dùng)
     for (const noti of details.rows) {
       try {
-        const payload = {
-          title: noti.title,
-          message: noti.message,
-          btnText: noti.btn_text,
-          screen_redirect: noti.screen_redirect
-        };
-
-        if (noti.platform === 2 && noti.fcm_token) {
-          // Android
-          await pushNoti({ id: noti.user_id, platform: 2, fcm_token: noti.fcm_token }, payload);
-        } else if (noti.platform === 1 && noti.web_push_subscription) {
-          // Webapp
-          await pushNoti({ id: noti.user_id, platform: 1, web_push_subscription: noti.web_push_subscription }, payload);
-        } else {
-          console.warn(`[Sender] ⚠️ User ${noti.user_id} không có token hợp lệ.`);
-        }
+        await pushNoti(
+          { id: noti.user_id, email: noti.email, platform: noti.platform, fcm_token: noti.fcm_token, web_push_subscription: noti.web_push_subscription },
+          { title: noti.title, message: noti.message, btnText: noti.btn_text, screen_redirect: noti.screen_redirect }
+        );
 
         await db.query(`UPDATE n_notifications_queue SET status=1, sent_at=NOW() WHERE id=$1`, [noti.id]);
         console.log(`[Sender ✅]: Gửi thành công noti_id=${noti.id}`);
