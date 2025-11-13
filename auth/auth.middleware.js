@@ -22,7 +22,12 @@ exports.authMiddleware = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-    sendDiscord('error', `🚨 Lỗi hệ thống [authMiddleware]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
-    res.status(401).json({ message: 'Invalid token' });
+    if (err.message == "jwt expired") {
+      res.status(401).json({ message: 'Phiên sử dụng hết hiệu lực. Vui lòng đăng nhập lại.' });
+    }
+    else {
+      sendDiscord('error', `🚨 Lỗi hệ thống [authMiddleware]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
+      res.status(401).json({ message: 'Invalid token' });
+    }
   }
 };
