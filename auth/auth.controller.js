@@ -177,7 +177,7 @@ exports.confirmRegister = async (req, res) => {
     `, [userRes.rows[0].id]);
 
     const token = jwt.sign({ id: userRes.rows[0].id }, SECRET, { expiresIn: '30d' });
-    res.json({ message: 'Đăng ký tài khoản thành công', token, email, deviceId: device_id });
+    res.json({ message: 'Đăng ký tài khoản thành công', token, email, deviceId: device_id, isSub: false });
 
     sendEmailDangKyThanhCong(email, password).catch(err => console.log("Lỗi gửi mail [confirmRegister - đăng ký tài khoản]:", err.message));
   } catch (err) {
@@ -364,7 +364,7 @@ exports.authGoogle = async (req, res) => {
 
     // Check DB: nếu user chưa tồn tại thì tạo mới
     let userId, isNew = false, password;
-    let user = await db.query('SELECT id, device_id FROM n_users WHERE email = $1', [email]);
+    let user = await db.query('SELECT id, device_id, fcm_token, web_push_subscription FROM n_users WHERE email = $1', [email]);
     var isSub = false;
 
     if (user.rows.length == 0) {
