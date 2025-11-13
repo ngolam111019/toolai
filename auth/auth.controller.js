@@ -79,8 +79,13 @@ exports.login = async (req, res) => {
         });
     }
 
+    var isSub = false;
+    if (user.fcm_token || user.web_push_subscription) {
+      isSub = true;
+    }
+
     const token = jwt.sign({ id: user.id }, SECRET, { expiresIn: '30d' });
-    res.json({ message: 'Đăng nhập thành công', token, email, deviceId: device_id });
+    res.json({ message: 'Đăng nhập thành công', token, email, deviceId: device_id, isSub });
   } catch (err) {
     sendDiscord('error', `🚨 Lỗi hệ thống [login]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
     res.status(500).json({ message: 'Đăng nhập không thành công' });
@@ -331,7 +336,7 @@ exports.fcmToken = async (req, res) => {
   try {
     await db.query(`UPDATE n_users SET fcm_token = $1 WHERE id = $2`, [fcm_token, userId]);
     req.user.fcm_token = fcm_token;
-    
+
     return res.json({ message: 'Cập nhật fcm_token thành công' });
   } catch (err) {
     console.error('[fcmToken]', err);
@@ -342,8 +347,6 @@ exports.fcmToken = async (req, res) => {
 
 exports.authGoogle = async (req, res) => {
   const { idToken, deviceId, platform } = req.body;
-  console.log('1. req.body');
-  console.log(req.body);
   try {
     var googleClientId = process.env.GOOGLE_CLIENT_ID;
     if (platform == 1) {
@@ -359,13 +362,12 @@ exports.authGoogle = async (req, res) => {
     const payload = ticket.getPayload();
     const email = payload.email;
 
-    console.log('2. ticket.getPayload()');
     // Check DB: nếu user chưa tồn tại thì tạo mới
     let userId, isNew = false, password;
     let user = await db.query('SELECT id, device_id FROM n_users WHERE email = $1', [email]);
+    var isSub = false;
 
     if (user.rows.length == 0) {
-      console.log('3. Tạo user');
       password = Math.random().toString(36).slice(-8);
       const hashed = await bcrypt.hash(password, 10);
       const userRes = await db.query(`
@@ -389,7 +391,6 @@ exports.authGoogle = async (req, res) => {
       isNew = true;
     }
     else {
-      console.log('4. user đã có');
       var existUser = user.rows[0];
       userId = existUser.id
 
@@ -398,9 +399,6 @@ exports.authGoogle = async (req, res) => {
       if (userPackages.rows.length > 0) {
         var userPackage = userPackages.rows[0];
         var now = format.getTodayVNDatetime();
-
-        console.log("now: " + now);
-        console.log("userPackage: " + userPackage.expired_at);
         if (now > userPackage.expired_at) {
           //hết hạn
           console.log("hết hạn");
@@ -428,7 +426,6 @@ exports.authGoogle = async (req, res) => {
           console.log("còn hạn: " + userId);
         }
       }
-      console.log('5. !existUser.device_id');
       // kiểm tra device_id
       if (!existUser.device_id) {
         await db.query('UPDATE n_users SET device_id = $1 WHERE id = $2', [deviceId, userId]);
@@ -437,20 +434,18 @@ exports.authGoogle = async (req, res) => {
         return res.status(403).json({ message: 'Thiết bị không hợp lệ. Tài khoản đã gắn với thiết bị khác.' });
       }
 
-
+      if (existUser.fcm_token || existUser.web_push_subscription) {
+        isSub = true;
+      }
     }
 
     const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
-    res.json({ message: 'Đăng nhập thành công', token, email, deviceId });
-
-    console.log('6. sendEmailDangKyThanhCong');
+    res.json({ message: 'Đăng nhập thành công', token, email, deviceId, isSub });
     if (isNew) {
       sendEmailDangKyThanhCong(email, password).catch(err => console.log("Lỗi gửi mail [confirmRegister - đăng ký tài khoản]:", err.message));
     }
-
-    console.log('7. end sendEmailDangKyThanhCong');
   } catch (err) {
-    console.log("đănh nhập GG: " + err);
+    console.log("đăng nhập GG: " + err);
     res.status(401).json({ error: err });
   }
 }
