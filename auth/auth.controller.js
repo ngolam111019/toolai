@@ -17,6 +17,7 @@ exports.login = async (req, res) => {
     return res.status(400).json({ message: 'Email sai định dạng' });
 
   try {
+    var isSub = false, usedTrial = 0;
     const userRes = await db.query('SELECT * FROM n_users WHERE email = $1', [email]);
     if (!userRes.rows.length) return res.status(404).json({ message: 'Tài khoản không tồn tại. Hãy đăng ký tài khoản' });
 
@@ -32,15 +33,8 @@ exports.login = async (req, res) => {
     // Nếu hết hạn và chưa dùng thử | dùng thử dưới 3 lượt 
     let userPackages = await db.query('SELECT id, expired_at FROM n_user_packages WHERE user_id = $1 LIMIT 1', [userId]);
     if (userPackages.rows.length > 0) {
-      var userPackage = userPackages.rows[0];
-      var now = format.getTodayVNDatetime();
 
-      console.log("now: " + now);
-      console.log("userPackage: " + userPackage.expired_at);
-      if (now > userPackage.expired_at) {
-        //hết hạn
-        console.log("hết hạn");
-        const n_tool_usage_logs = await db.query(`
+      const n_tool_usage_logs = await db.query(`
           SELECT COUNT (*) trial_used
           FROM public.n_tool_usage_logs
           WHERE gateway = 'Zon88' and user_id = $1
@@ -48,8 +42,16 @@ exports.login = async (req, res) => {
           LIMIT 1
         `, [userId]);
 
+      usedTrial = n_tool_usage_logs.rows.length;
+
+      var userPackage = userPackages.rows[0];
+      var now = format.getTodayVNDatetime();
+
+      if (now > userPackage.expired_at) {
+        //hết hạn
+        console.log("hết hạn");
         // Chưa dùng thử hoặc dùng thử dưới 3 lượt
-        if (n_tool_usage_logs.rows.length < 3) {
+        if (usedTrial < 3) {
           console.log("Chưa dùng thử hoặc dùng thử dưới 3 lượt");
           await db.query(`
             UPDATE n_user_packages 
@@ -79,13 +81,12 @@ exports.login = async (req, res) => {
         });
     }
 
-    var isSub = false;
     if (user.fcm_token || user.web_push_subscription) {
       isSub = true;
     }
 
     const token = jwt.sign({ id: user.id }, SECRET, { expiresIn: '30d' });
-    res.json({ message: 'Đăng nhập thành công', token, email, deviceId: device_id, isSub });
+    res.json({ message: 'Đăng nhập thành công', token, email, deviceId: device_id, isSub, usedTrial });
   } catch (err) {
     sendDiscord('error', `🚨 Lỗi hệ thống [login]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
     res.status(500).json({ message: 'Đăng nhập không thành công' });
@@ -177,7 +178,7 @@ exports.confirmRegister = async (req, res) => {
     `, [userRes.rows[0].id]);
 
     const token = jwt.sign({ id: userRes.rows[0].id }, SECRET, { expiresIn: '30d' });
-    res.json({ message: 'Đăng ký tài khoản thành công', token, email, deviceId: device_id, isSub: false });
+    res.json({ message: 'Đăng ký tài khoản thành công', token, email, deviceId: device_id, isSub: false, usedTrial: 0 });
 
     sendEmailDangKyThanhCong(email, password).catch(err => console.log("Lỗi gửi mail [confirmRegister - đăng ký tài khoản]:", err.message));
   } catch (err) {
@@ -365,7 +366,7 @@ exports.authGoogle = async (req, res) => {
     // Check DB: nếu user chưa tồn tại thì tạo mới
     let userId, isNew = false, password;
     let user = await db.query('SELECT id, device_id, fcm_token, web_push_subscription FROM n_users WHERE email = $1', [email]);
-    var isSub = false;
+    var isSub = false, usedTrial = 0;
 
     if (user.rows.length == 0) {
       password = Math.random().toString(36).slice(-8);
@@ -398,11 +399,8 @@ exports.authGoogle = async (req, res) => {
       let userPackages = await db.query('SELECT id, expired_at FROM n_user_packages WHERE user_id = $1 LIMIT 1', [userId]);
       if (userPackages.rows.length > 0) {
         var userPackage = userPackages.rows[0];
-        var now = format.getTodayVNDatetime();
-        if (now > userPackage.expired_at) {
-          //hết hạn
-          console.log("hết hạn");
-          const n_tool_usage_logs = await db.query(`
+
+        const n_tool_usage_logs = await db.query(`
             SELECT COUNT (*) trial_used
             FROM public.n_tool_usage_logs
             WHERE gateway = 'Zon88' and user_id = $1
@@ -410,8 +408,14 @@ exports.authGoogle = async (req, res) => {
             LIMIT 1
           `, [userId]);
 
+        usedTrial = n_tool_usage_logs.rows.length;
+
+        var now = format.getTodayVNDatetime();
+        if (now > userPackage.expired_at) {
+          //hết hạn
+          console.log("hết hạn");
           // Chưa dùng thử hoặc dùng thử dưới 3 lượt
-          if (n_tool_usage_logs.rows.length < 3) {
+          if (usedTrial < 3) {
             console.log("Chưa dùng thử hoặc dùng thử dưới 3 lượt");
             await db.query(`
               UPDATE n_user_packages 
@@ -440,7 +444,7 @@ exports.authGoogle = async (req, res) => {
     }
 
     const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
-    res.json({ message: 'Đăng nhập thành công', token, email, deviceId, isSub });
+    res.json({ message: 'Đăng nhập thành công', token, email, deviceId, isSub, usedTrial });
     if (isNew) {
       sendEmailDangKyThanhCong(email, password).catch(err => console.log("Lỗi gửi mail [confirmRegister - đăng ký tài khoản]:", err.message));
     }
