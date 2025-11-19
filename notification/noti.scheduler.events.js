@@ -3,23 +3,37 @@ const cron = require('node-cron');
 const db = require('../db/db');
 const { DateTime } = require('luxon');
 
+/**
+ * FLOW MỚI CỦA BẠN:
+ * ON_SIGNUP → ON_UPGRADE_TRIAL_PRO → ON_UPGRADE_PREMIUM → ON_PREMIUM_PRO_INACTIVE
+ */
+
+const flowGroups = {
+  ON_SIGNUP: [],
+  ON_UPGRADE_TRIAL_PRO: ['ON_SIGNUP'],
+  ON_UPGRADE_PREMIUM: ['ON_SIGNUP', 'ON_UPGRADE_TRIAL_PRO'],
+  ON_PREMIUM_PRO_INACTIVE: ['ON_SIGNUP', 'ON_UPGRADE_TRIAL_PRO', 'ON_UPGRADE_PREMIUM']
+};
+
 async function scheduleNotificationsFromEvents() {
   try {
-    console.log('[SchedulerEvents] Quét sự kiện mới...');
+    console.log('[SchedulerEvents] Quét event mới…');
 
     const events = await db.query(`
       SELECT e.id, e.user_id, e.event_code, e.event_time, u.email, u.platform
       FROM (
-		select e.user_id, max(e.event_time) as event_time
-		from public.n_user_event_logs e
-		group by e.user_id) e1
-	  JOIN n_user_event_logs e ON e1.user_id = e.user_id and e1.event_time = e.event_time
+        SELECT user_id, MAX(event_time) AS event_time
+        FROM n_user_event_logs
+        GROUP BY user_id
+      ) last
+      JOIN n_user_event_logs e ON e.user_id = last.user_id AND e.event_time = last.event_time
       JOIN n_users u ON u.id = e.user_id
       WHERE NOT EXISTS (
         SELECT 1 FROM n_notifications_queue q
         WHERE q.user_id = e.user_id AND q.trigger_event = e.event_code
       )
-      LIMIT 100
+      ORDER BY e.event_time DESC
+      LIMIT 100;
     `);
 
     if (events.rowCount === 0) {
@@ -28,17 +42,21 @@ async function scheduleNotificationsFromEvents() {
     }
 
     const templates = await db.query(`
-      SELECT * FROM n_notification_templates WHERE is_active = TRUE
+      SELECT * FROM n_notification_templates
+      WHERE is_active = TRUE
     `);
 
     for (const ev of events.rows) {
-      // 🧩 1️⃣ Huỷ các flow cũ nếu có
+
+      // 1. Hủy flow cũ theo funnel
       await cancelOldFlow(ev.user_id, ev.event_code);
 
-      // 🧩 2️⃣ Lấy template tương ứng flow mới
-      const listTpl = templates.rows.filter(t => t.trigger_event === ev.event_code);
+      // 2. Lấy template thuộc event này
+      const listTpl = templates.rows.filter(
+        t => t.trigger_event === ev.event_code
+      );
 
-      // 🧩 3️⃣ Tạo queue mới
+      // 3. Tạo queue mới cho tất cả template
       for (const tpl of listTpl) {
         const sendAfter = DateTime.fromJSDate(ev.event_time)
           .plus({ hours: tpl.delay_hours })
@@ -48,7 +66,7 @@ async function scheduleNotificationsFromEvents() {
           INSERT INTO n_notifications_queue
           (user_id, email, platform, title, message, btn_text, screen_redirect, send_after, template_id, trigger_event, status)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0)
-          ON CONFLICT (user_id, template_id) DO NOTHING
+          ON CONFLICT (user_id, template_id) DO NOTHING;
         `, [
           ev.user_id,
           ev.email,
@@ -64,37 +82,28 @@ async function scheduleNotificationsFromEvents() {
       }
     }
 
-    console.log(`✅ [SchedulerEvents] Đã tạo job cho ${events.rowCount} sự kiện.`);
+    console.log(`✅ [SchedulerEvents] Đã tạo queue cho ${events.rowCount} event.`);
   } catch (err) {
-    console.error('❌ [SchedulerEvents] Lỗi:', err);
+    console.error('❌ [SchedulerEvents] Lỗi SchedulerEvents:', err);
   }
 }
 
-// ✅ Hàm huỷ flow cũ khi user chuyển giai đoạn
+// 🧹 XOÁ FLOW CŨ DỰA TRÊN FUNNEL
 async function cancelOldFlow(userId, newEvent) {
-  const flowGroups = {
-    ON_SIGNUP: ['ON_SIGNUP'], 
-    ON_UPGRADE_TRIAL_PRO: ['ON_SIGNUP', 'ON_UPGRADE_TRIAL_PRO', 'ON_UPGRADE_PREMIUM', 'ON_PREMIUM_PRO_INACTIVE'],
-    ON_UPGRADE_PREMIUM: ['ON_SIGNUP', 'ON_UPGRADE_TRIAL_PRO', 'ON_UPGRADE_PREMIUM', 'ON_PREMIUM_PRO_INACTIVE'],
-    ON_PREMIUM_PRO_INACTIVE: ['ON_SIGNUP', 'ON_UPGRADE_TRIAL_PRO', 'ON_UPGRADE_PREMIUM', 'ON_PREMIUM_PRO_INACTIVE']
-  };
+  const flowsToCancel = flowGroups[newEvent] || [];
 
-  // Xác định tất cả flow cũ cần xoá
-  const oldFlows = Object.values(flowGroups)
-    .find(g => g.includes(newEvent))  // Tìm nhóm chứa flow hiện tại
-    ?.filter(e => e !== newEvent) || [];
-
-  if (oldFlows.length === 0) return;
+  if (flowsToCancel.length === 0) return;
 
   await db.query(`
     DELETE FROM n_notifications_queue
-    WHERE user_id = $1 AND trigger_event = ANY($2::text[])
-  `, [userId, oldFlows]);
+    WHERE user_id = $1
+    AND trigger_event = ANY($2::text[])
+  `, [userId, flowsToCancel]);
 
-  console.log(`🧹 Đã huỷ ${oldFlows.join(', ')} cho user ${userId}`);
+  console.log(`🧹 Huỷ flow cũ: ${flowsToCancel.join(', ')} cho user ${userId}`);
 }
 
-// Cron 10 phút
+// CRON EVERY 3 MINUTES
 cron.schedule('*/3 * * * *', scheduleNotificationsFromEvents, {
   timezone: 'Asia/Ho_Chi_Minh',
 });
