@@ -10,9 +10,23 @@ const { DateTime } = require('luxon');
 
 const flowGroups = {
   ON_SIGNUP: [],
-  ON_UPGRADE_TRIAL_PRO: ['ON_SIGNUP'],
-  ON_UPGRADE_PREMIUM: ['ON_SIGNUP', 'ON_UPGRADE_TRIAL_PRO'],
-  ON_PREMIUM_PRO_INACTIVE: ['ON_SIGNUP', 'ON_UPGRADE_TRIAL_PRO', 'ON_UPGRADE_PREMIUM']
+
+  // Funnel mới: SIGNUP_TRIAL_USED huỷ toàn bộ SIGNUP cũ
+  ON_SIGNUP_TRIAL_USED: ['ON_SIGNUP'],
+
+  // Funnel dùng thử Pro
+  ON_UPGRADE_TRIAL_PRO: ['ON_SIGNUP', 'ON_SIGNUP_TRIAL_USED'],
+
+  // Funnel Premium
+  ON_UPGRADE_PREMIUM: ['ON_SIGNUP', 'ON_SIGNUP_TRIAL_USED', 'ON_UPGRADE_TRIAL_PRO'],
+
+  // Funnel Pro
+  ON_PREMIUM_PRO_INACTIVE: [
+    'ON_SIGNUP',
+    'ON_SIGNUP_TRIAL_USED',
+    'ON_UPGRADE_TRIAL_PRO',
+    'ON_UPGRADE_PREMIUM'
+  ]
 };
 
 async function scheduleNotificationsFromEvents() {

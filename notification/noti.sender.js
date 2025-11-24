@@ -109,8 +109,14 @@ async function shouldSkipNotification(noti) {
 
   // =========== 1. SIGNUP ===========
   if (noti.trigger_event === 'ON_SIGNUP') {
-    if (noti.trial_used >= 5) return true;
+    if (noti.trial_used >= 3) return true;
     if (noti.current_package !== 0) return true;
+  }
+
+  // =========== 1B. SIGNUP_TRIAL_USED (>=3 lượt) ===========
+  if (noti.trigger_event === 'ON_SIGNUP_TRIAL_USED') {
+    if (noti.current_package !== 0) return true;
+    if (noti.trial_used < 3) return true;
   }
 
   // =========== 2. TRIAL PRO ===========
