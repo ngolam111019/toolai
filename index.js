@@ -26,6 +26,7 @@ const gatewayRoutes = require('./tool/gateway.routes');
 const balanceRoutes = require('./balance/balance.routes');
 const usageLogsRoutes = require('./usagelogs/usagelog.routes');
 const notiRoutes = require('./notification/noti.routes');
+require('./notification/noti.scheduler.signupTrialUsed');
 require('./notification/noti.scheduler.events');
 require('./notification/noti.sender');
 

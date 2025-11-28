@@ -118,7 +118,7 @@ async function cancelOldFlow(userId, newEvent) {
 }
 
 // CRON EVERY 3 MINUTES
-cron.schedule('*/3 * * * *', scheduleNotificationsFromEvents, {
+cron.schedule('* * * * *', scheduleNotificationsFromEvents, {
   timezone: 'Asia/Ho_Chi_Minh',
 });
 

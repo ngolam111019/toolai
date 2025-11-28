@@ -64,8 +64,34 @@ async function sendPendingNotifications() {
         continue;
       }
 
-      // 4️⃣ Gửi noti
+      // 4️⃣ Lưu vào DB → push → update queue
       try {
+        // 4.1 Lưu vào bảng n_user_notifications để app sync
+        const insertLog = `
+          INSERT INTO n_user_notifications
+            (user_id, title, body, type, deep_link, image_url, meta_json, is_read, created_at, updated_at)
+          VALUES
+            ($1, $2, $3, $4, $5, $6, $7::jsonb, FALSE, NOW(), NOW())
+          RETURNING id;
+        `;
+
+        const logValues = [
+          noti.user_id,
+          noti.title,
+          noti.message,
+          noti.trigger_event,          // type = trigger_event
+          noti.screen_redirect,         // deep_link
+          null,                         // image_url (nếu sau này có thì map)
+          JSON.stringify({
+            template_id: noti.template_id,
+            btn_text: noti.btn_text
+          })
+        ];
+
+        const logRes = await db.query(insertLog, logValues);
+        const localId = logRes.rows[0].id;
+
+        // 4.2 Gửi noti kèm localId để client sync chính xác
         await pushNoti(
           {
             id: noti.user_id,
@@ -78,16 +104,19 @@ async function sendPendingNotifications() {
             title: noti.title,
             message: noti.message,
             btnText: noti.btn_text,
-            screen_redirect: noti.screen_redirect
+            screen_redirect: noti.screen_redirect,
+            localId: localId.toString()
           }
         );
 
+        // 4.3 Update queue
         await db.query(
           `UPDATE n_notifications_queue SET status=1, sent_at=NOW() WHERE id=$1`,
           [noti.id]
         );
 
-        console.log(`✅ [Sender] Sent noti_id=${noti.id}`);
+        console.log(`✅ [Sender] Sent noti_id=${noti.id} | log_id=${localId}`);
+
       } catch (err) {
         await db.query(`
           UPDATE n_notifications_queue

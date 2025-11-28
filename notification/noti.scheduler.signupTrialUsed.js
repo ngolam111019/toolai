@@ -18,6 +18,7 @@ async function scheduleSignupTrialUsed() {
       JOIN n_user_packages p ON p.user_id = u.id
       WHERE p.package_id = 0
         AND p.turns_used_today >= 3
+        AND u.created_at > '2025-11-28 14:00:00'
     `);
 
     if (users.rowCount === 0) {
@@ -46,7 +47,7 @@ async function scheduleSignupTrialUsed() {
       // 3️⃣ Ghi event mới
       await db.query(`
         INSERT INTO n_user_event_logs (user_id, event_code, meta)
-        VALUES ($1, 'ON_SIGNUP_TRIAL_USED', jsonb_build_object('trial_used', $2))
+        VALUES ($1, 'ON_SIGNUP_TRIAL_USED', jsonb_build_object('trial_used', $2::int))
       `, [user.user_id, user.trial_used]);
 
       console.log(`📌 [SignupTrialUsed] Ghi event mới cho user ${user.user_id}`);
@@ -58,7 +59,7 @@ async function scheduleSignupTrialUsed() {
 }
 
 // CRON 5 phút 1 lần
-cron.schedule('*/5 * * * *', scheduleSignupTrialUsed, {
+cron.schedule('* * * * *', scheduleSignupTrialUsed, {
   timezone: 'Asia/Ho_Chi_Minh',
 });
 

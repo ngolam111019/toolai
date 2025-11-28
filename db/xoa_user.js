@@ -39,6 +39,7 @@ const emailToDelete = 'dtruong1119@gmail.com';
     await client.query('DELETE FROM public.n_notifications_queue WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM public.n_user_event_logs WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM public.n_tool_usage_logs WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM public.n_user_notifications WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM public.n_users WHERE id = $1', [userId]);
 
     await client.query('COMMIT');
