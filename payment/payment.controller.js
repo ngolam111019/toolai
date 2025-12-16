@@ -52,7 +52,7 @@ const createPayment = async (req, res) => {
         password: process.env.GB_PASSWORD,
         tran_id: tranid,
         amount,
-        bank_code: 'VCB',
+        bank_code: 'MSB',
         url_code: 448,
         message
       });
