@@ -206,8 +206,16 @@ const handlePaymentCallback = async (req, res) => {
         oneClick: false
       };
 
+      if (tx.package_id && tx.package_id == 1) {
+        const { rows } = await db.query(`SELECT * FROM n_packages WHERE id = $1`, [tx.package_id]);
+        if (!rows.length) return res.status(400).json({ message: 'Gói không tồn tại' });
+        const pkg = rows[0];
+
+        resultData.message = resultData.message + '\n❌ Nâng cấp KHÔNG thành công ' + pkg.name + ' (Đã đủ suất). Vui lòng chọn gói khác.';
+        resultData.oneClick = true;
+      }
       // [NÂNG CẤP] Nếu tx.package_id có dữ liệu thì nâng cấp luôn
-      if (tx.package_id && tx.package_id > 0) {
+      else if (tx.package_id && tx.package_id > 0) {
         // B1: Lấy gói cần nâng cấp
         const { rows } = await db.query(`SELECT * FROM n_packages WHERE id = $1`, [tx.package_id]);
         if (!rows.length) return res.status(400).json({ message: 'Gói không tồn tại' });

@@ -13,3 +13,4 @@ yarn-error.log
 # Heroku build
 *.log
 .env
+db/xoa_user.js

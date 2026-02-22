@@ -28,77 +28,87 @@ async function upgradePackage(req, res) {
     if (!rows.length) return res.status(400).json({ message: 'Gói không tồn tại' });
 
     const pkg = rows[0];
-    const price = pkg.price;
-    const isLifetime = pkg.is_lifetime;
-    const duration = pkg.duration_days;
 
-    // B2: Lấy số dư user
-    const userRes = await db.query(`SELECT balance_xu FROM n_users WHERE id = $1`, [userId]);
-    const currentBalance = userRes.rows[0]?.balance_xu || 0;
-
-    if (currentBalance < price) {
-      return res.status(400).json({ message: 'Không đủ Xu để nâng cấp' });
+    if (package_id && package_id == 1) {
+      return res.json({
+        success: false,
+        message: '❌ Nâng cấp KHÔNG thành công ' + pkg.name + ' (Đã đủ suất). Vui lòng chọn gói khác.'
+      });
     }
+    else {
+
+      const price = pkg.price;
+      const isLifetime = pkg.is_lifetime;
+      const duration = pkg.duration_days;
+
+      // B2: Lấy số dư user
+      const userRes = await db.query(`SELECT balance_xu FROM n_users WHERE id = $1`, [userId]);
+      const currentBalance = userRes.rows[0]?.balance_xu || 0;
+
+      if (currentBalance < price) {
+        return res.status(400).json({ message: 'Không đủ Xu để nâng cấp' });
+      }
 
 
-    // B3: Trừ Xu
-    await db.query(`UPDATE n_users SET balance_xu = balance_xu - $1 WHERE id = $2`, [price, userId]);
+      // B3: Trừ Xu
+      await db.query(`UPDATE n_users SET balance_xu = balance_xu - $1 WHERE id = $2`, [price, userId]);
 
-    // B4: Ghi log vào n_transactions
-    await db.query(`
-      INSERT INTO n_transactions (user_id, amount, type, status, reason, ref_code)
-      VALUES ($1, $2, 'purchase', 'success', $3, $4)
-    `, [userId, -price, `Mua ${pkg.name}`, `pkg_${pkg.id}`]);
+      // B4: Ghi log vào n_transactions
+      await db.query(`
+        INSERT INTO n_transactions (user_id, amount, type, status, reason, ref_code)
+        VALUES ($1, $2, 'purchase', 'success', $3, $4)
+      `, [userId, -price, `Mua ${pkg.name}`, `pkg_${pkg.id}`]);
 
-    // B5: Huỷ gói cũ nếu chỉ dùng 1 gói
-    await db.query(`DELETE FROM n_user_packages WHERE user_id = $1`, [userId]);
+      // B5: Huỷ gói cũ nếu chỉ dùng 1 gói
+      await db.query(`DELETE FROM n_user_packages WHERE user_id = $1`, [userId]);
 
-    // B6: Tính hạn dùng
-    const expiredAt = isLifetime
-      ? '9999-12-31'
-      : new Date(Date.now() + duration * 86400 * 1000);
+      // B6: Tính hạn dùng
+      const expiredAt = isLifetime
+        ? '9999-12-31'
+        : new Date(Date.now() + duration * 86400 * 1000);
 
-    // B7: Ghi bản ghi mới vào n_user_packages
-    await db.query(`
-      INSERT INTO n_user_packages (user_id, package_id, turns_used_today, last_turn_reset, expired_at)
-      VALUES ($1, $2, 0, NOW(), $3)
-    `, [userId, pkg.id, expiredAt]);
+      // B7: Ghi bản ghi mới vào n_user_packages
+      await db.query(`
+        INSERT INTO n_user_packages (user_id, package_id, turns_used_today, last_turn_reset, expired_at)
+        VALUES ($1, $2, 0, NOW(), $3)
+      `, [userId, pkg.id, expiredAt]);
 
-    var eventCode;
-    switch (pkg.id) {
-      case 1:
-        eventCode = 'ON_UPGRADE_TRIAL_PRO'
-        break;
-      case 2:
-        eventCode = 'ON_UPGRADE_PREMIUM'
-        break;
-      case 3:
-        eventCode = 'ON_PREMIUM_PRO_INACTIVE'
-        break;
-      default:
-        eventCode = 'ON_SIGNUP'
+      var eventCode;
+      switch (pkg.id) {
+        case 1:
+          eventCode = 'ON_UPGRADE_TRIAL_PRO'
+          break;
+        case 2:
+          eventCode = 'ON_UPGRADE_PREMIUM'
+          break;
+        case 3:
+          eventCode = 'ON_PREMIUM_PRO_INACTIVE'
+          break;
+        default:
+          eventCode = 'ON_SIGNUP'
+      }
+
+      // ghi log
+      await db.query(`
+        INSERT INTO n_user_event_logs (user_id, event_code) 
+        VALUES ($1, $2)
+      `, [userId, eventCode]);
+
+      var {t, d, type} = format.titleDescTypeSenDiscord(true, userId, pkg.name, parseInt(price), req.user.platform, null);
+      
+      sendDiscord(type, null, {
+        title: t,
+        description: d,
+        color: 0xFFD700
+      });
+
+      return res.json({
+        success: true,
+        message: 'Nâng cấp thành công',
+        package_name: pkg.name,
+        expired_at: expiredAt
+      });
     }
-
-    // ghi log
-    await db.query(`
-      INSERT INTO n_user_event_logs (user_id, event_code) 
-      VALUES ($1, $2)
-    `, [userId, eventCode]);
-
-    var {t, d, type} = format.titleDescTypeSenDiscord(true, userId, pkg.name, parseInt(price), req.user.platform, null);
-    
-    sendDiscord(type, null, {
-      title: t,
-      description: d,
-      color: 0xFFD700
-    });
-
-    return res.json({
-      success: true,
-      message: 'Nâng cấp thành công',
-      package_name: pkg.name,
-      expired_at: expiredAt
-    });
 
   } catch (err) {
     console.error('[upgradePackage]', err);

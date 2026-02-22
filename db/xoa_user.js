@@ -10,7 +10,7 @@ const pool = new Pool({
 });
 
 // ❗ THAY EMAIL CẦN XÓA Ở ĐÂY
-const emailToDelete = 'dtruong1119@gmail.com';
+const emailToDelete = 'tooltaixiuai@gmail.com';
 
 (async () => {
   const client = await pool.connect();
