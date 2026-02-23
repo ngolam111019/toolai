@@ -206,86 +206,84 @@ const handlePaymentCallback = async (req, res) => {
         oneClick: false
       };
 
-      if (tx.package_id && tx.package_id == 1) {
-        const { rows } = await db.query(`SELECT * FROM n_packages WHERE id = $1`, [tx.package_id]);
-        if (!rows.length) return res.status(400).json({ message: 'Gói không tồn tại' });
-        const pkg = rows[0];
-
-        resultData.message = resultData.message + '\n❌ Nâng cấp KHÔNG thành công ' + pkg.name + ' (Đã đủ suất). Vui lòng chọn gói khác.';
-        resultData.oneClick = true;
-      }
-      // [NÂNG CẤP] Nếu tx.package_id có dữ liệu thì nâng cấp luôn
-      else if (tx.package_id && tx.package_id > 0) {
-        // B1: Lấy gói cần nâng cấp
-        const { rows } = await db.query(`SELECT * FROM n_packages WHERE id = $1`, [tx.package_id]);
-        if (!rows.length) return res.status(400).json({ message: 'Gói không tồn tại' });
-
-        const pkg = rows[0];
+      
+      // B1: Lấy gói cần nâng cấp
+      const { rows } = await db.query(`SELECT * FROM n_packages WHERE id = $1`, [tx.package_id]);
+      if (!rows.length) return res.status(400).json({ message: 'Gói không tồn tại' });
+      const pkg = rows[0];
+      if (pkg) {
         const price = pkg.price;
-        const isLifetime = pkg.is_lifetime;
-        const duration = pkg.duration_days;
-
-        // B2: Lấy số dư user
-        const userRes = await db.query(`SELECT balance_xu FROM n_users WHERE id = $1`, [tx.user_id]);
-        const currentBalance = userRes.rows[0]?.balance_xu || 0;
-
-        if (currentBalance < price) {
-          return res.status(400).json({ message: 'Không đủ Xu để nâng cấp' });
+        if (tx.package_id && tx.package_id == 1) {
+          resultData.message = resultData.message + '\n❌ Nâng cấp KHÔNG thành công ' + pkg.name + ' (Đã đủ suất). Vui lòng chọn gói khác.';
+          resultData.oneClick = true;
         }
+        // [NÂNG CẤP] Nếu tx.package_id có dữ liệu thì nâng cấp luôn
+        else if (tx.package_id && tx.package_id > 0) {
+          const isLifetime = pkg.is_lifetime;
+          const duration = pkg.duration_days;
 
-        // B3: Trừ Xu
-        await db.query(`UPDATE n_users SET balance_xu = balance_xu - $1 WHERE id = $2`, [price, tx.user_id]);
+          // B2: Lấy số dư user
+          const userRes = await db.query(`SELECT balance_xu FROM n_users WHERE id = $1`, [tx.user_id]);
+          const currentBalance = userRes.rows[0]?.balance_xu || 0;
 
-        // B4: Ghi log vào n_transactions
-        await db.query(`
-          INSERT INTO n_transactions (user_id, amount, type, status, reason, ref_code)
-          VALUES ($1, $2, 'purchase', 'success', $3, $4)
-        `, [tx.user_id, -price, `Mua ${pkg.name}`, `pkg_${pkg.id}`]);
+          if (currentBalance < price) {
+            return res.status(400).json({ message: 'Không đủ Xu để nâng cấp' });
+          }
 
-        // B5: Huỷ gói cũ nếu chỉ dùng 1 gói
-        await db.query(`DELETE FROM n_user_packages WHERE user_id = $1`, [tx.user_id]);
+          // B3: Trừ Xu
+          await db.query(`UPDATE n_users SET balance_xu = balance_xu - $1 WHERE id = $2`, [price, tx.user_id]);
 
-        // B6: Tính hạn dùng
-        const expiredAt = isLifetime
-          ? '9999-12-31'
-          : new Date(Date.now() + duration * 86400 * 1000);
+          // B4: Ghi log vào n_transactions
+          await db.query(`
+            INSERT INTO n_transactions (user_id, amount, type, status, reason, ref_code)
+            VALUES ($1, $2, 'purchase', 'success', $3, $4)
+          `, [tx.user_id, -price, `Mua ${pkg.name}`, `pkg_${pkg.id}`]);
 
-        // B7: Ghi bản ghi mới vào n_user_packages
-        await db.query(`
-          INSERT INTO n_user_packages (user_id, package_id, turns_used_today, last_turn_reset, expired_at)
-          VALUES ($1, $2, 0, NOW(), $3)
-        `, [tx.user_id, pkg.id, expiredAt]);
+          // B5: Huỷ gói cũ nếu chỉ dùng 1 gói
+          await db.query(`DELETE FROM n_user_packages WHERE user_id = $1`, [tx.user_id]);
 
-        var eventCode;
-        switch (pkg.id) {
-          case 1:
-            eventCode = 'ON_UPGRADE_TRIAL_PRO'
-            break;
-          case 2:
-            eventCode = 'ON_UPGRADE_PREMIUM'
-            break;
-          case 3:
-            eventCode = 'ON_PREMIUM_PRO_INACTIVE'
-            break;
-          default:
-            eventCode = 'ON_SIGNUP'
+          // B6: Tính hạn dùng
+          const expiredAt = isLifetime
+            ? '9999-12-31'
+            : new Date(Date.now() + duration * 86400 * 1000);
+
+          // B7: Ghi bản ghi mới vào n_user_packages
+          await db.query(`
+            INSERT INTO n_user_packages (user_id, package_id, turns_used_today, last_turn_reset, expired_at)
+            VALUES ($1, $2, 0, NOW(), $3)
+          `, [tx.user_id, pkg.id, expiredAt]);
+
+          var eventCode;
+          switch (pkg.id) {
+            case 1:
+              eventCode = 'ON_UPGRADE_TRIAL_PRO'
+              break;
+            case 2:
+              eventCode = 'ON_UPGRADE_PREMIUM'
+              break;
+            case 3:
+              eventCode = 'ON_PREMIUM_PRO_INACTIVE'
+              break;
+            default:
+              eventCode = 'ON_SIGNUP'
+          }
+
+          // ghi log
+          await db.query(`
+            INSERT INTO n_user_event_logs (user_id, event_code) 
+            VALUES ($1, $2)
+          `, [tx.user_id, eventCode]);
+
+          resultData.message = resultData.message + '\n📦 Nâng cấp thành công ' + pkg.name + ' (-' + format.formatWithUnit(price, 'Xu') + ')';
+          resultData.oneClick = true;
+
         }
-
-        // ghi log
-        await db.query(`
-          INSERT INTO n_user_event_logs (user_id, event_code) 
-          VALUES ($1, $2)
-        `, [tx.user_id, eventCode]);
-
-        resultData.message = resultData.message + '\n📦 Nâng cấp thành công ' + pkg.name + ' (-' + format.formatWithUnit(price, 'Xu') + ')';
-        resultData.oneClick = true;
 
         var {t, d, type} = format.titleDescTypeSenDiscord(true, tx.user_id, pkg.name, price, _user.platform, tran_id);
         tileDiscord = t;
         descDiscord = d;
         typeDiscord = type;
       }
-
       // Gửi thông báo hoặc socket cho user
       const resultIo = emitToRoom(tran_id, 'payment_result', resultData);
 
