@@ -7,10 +7,22 @@ yarn-error.log
 # OS
 .DS_Store
 
-# Env
+# Env files — NEVER commit secrets
 .env
+.env.local
+.env.test
+.env.production
 
-# Heroku build
+# Firebase service account — CRITICAL: never commit
+serviceAccountKey.json
+*.serviceAccountKey.json
+
+# Logs
 *.log
-.env
-db/xoa_user.js
+
+# Prisma generated
+/generated/prisma
+
+# Claude local overrides
+.claude/settings.local.json
+.claude/CLAUDE.local.md

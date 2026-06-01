@@ -9,13 +9,11 @@ const server = http.createServer(app);
 const admin = require('firebase-admin');
 const serviceAccount = require('./serviceAccountKey.json');
 const { sendDiscord } = require('./utils/discordNotify');
-
-
+const { errorHandler, notFoundHandler } = require('./src/middleware/error-handler');
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
-
 
 // Routers
 const authRoutes = require('./auth/auth.routes');
@@ -34,6 +32,11 @@ require('./notification/noti.sender');
 app.use(cors());
 app.use(express.json()); // parse JSON body
 
+// Health check
+app.get('/', (req, res) => {
+  res.json({ success: true, message: 'Tool AI API is running 🚀', version: '1.0.0' });
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tool', toolRoutes);
@@ -44,29 +47,20 @@ app.use('/api/balance', balanceRoutes);
 app.use('/api/usagelog', usageLogsRoutes);
 app.use('/api/noti', notiRoutes);
 
-// Health check
-app.get('/', (req, res) => {
-  res.send('Tool AI API is running 🚀');
-});
+// 404 handler — phải đặt sau tất cả routes
+app.use(notFoundHandler);
 
-// 404 handler
-app.use((req, res, next) => {
-  res.status(404).json({ error: 'Route not found' });
-});
-
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Server Error:', err);
-  res.status(500).json({ error: 'Internal Server Error' });
-});
+// Global error handler — phải đặt CUỐI CÙNG (4 params)
+app.use(errorHandler);
 
 const { initSocket } = require('./socket/socket');
-initSocket(server); // <-- chạy socket server
+initSocket(server);
+
 // Khởi động server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, async () => {
   try {
-    await db.query('SELECT 1'); // test DB
+    await db.query('SELECT 1'); // test DB connection
     console.log(`✅ DB connected`);
     console.log(`🚀 Server + Socket running at http://localhost:${PORT}`);
   } catch (err) {
