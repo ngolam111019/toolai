@@ -1,47 +1,24 @@
+/**
+ * UsageLog Controller — Thin Request/Response Layer
+ */
 const db = require('../db/db');
-const { sendDiscord } = require('../utils/discordNotify');
+const asyncHandler = require('../src/utils/async-handler');
 
-async function getUsageLogs(req, res) {
-  try {
-      const userId = req.user.id;
-  
-      const { rows } = await db.query(`
-        SELECT gateway, round_code, prediction,used_at
-        FROM n_tool_usage_logs
-        WHERE user_id = $1
-        ORDER BY used_at DESC
-        LIMIT 100
-      `, [userId]);
-  
-      return res.json(rows);
-    } catch (err) {
-      console.error('[getBalanceLogs]', err);
-      sendDiscord('error', `🚨 Lỗi hệ thống [getBalanceLogs]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
-      res.status(500).json({ error: 'Lỗi lấy lịch sử sử dụng' });
-    }
-}
+const USAGE_LOG_FIELDS = 'gateway, round_code, prediction, used_at';
+const USAGE_LOG_QUERY = `SELECT ${USAGE_LOG_FIELDS} FROM n_tool_usage_logs WHERE user_id = $1 ORDER BY used_at DESC LIMIT 100`;
 
-async function checkUsageTrial(req, res) {
-  try {
-      const userId = req.user.id;
-  
-      const { rows } = await db.query(`
-        SELECT gateway, round_code, prediction,used_at
-        FROM n_tool_usage_logs
-        WHERE user_id = $1
-        ORDER BY used_at DESC
-        LIMIT 100
-      `, [userId]);
-  
-      return res.json(rows);
-    } catch (err) {
-      console.error('[getBalanceLogs]', err);
-      sendDiscord('error', `🚨 Lỗi hệ thống [getBalanceLogs]: ${err.message}\nThời gian: ${new Date().toLocaleString()}`);
-      res.status(500).json({ error: 'Lỗi lấy lịch sử sử dụng' });
-    }
-}
+/**
+ * GET /api/usagelog
+ */
+exports.getUsageLogs = asyncHandler(async (req, res) => {
+  const { rows } = await db.query(USAGE_LOG_QUERY, [req.user.id]);
+  res.json(rows);
+});
 
-module.exports = {
-  getUsageLogs,
-  checkUsageTrial
-};
+/**
+ * GET /api/usagelog/trial
+ */
+exports.checkUsageTrial = asyncHandler(async (req, res) => {
+  const { rows } = await db.query(USAGE_LOG_QUERY, [req.user.id]);
+  res.json(rows);
+});
