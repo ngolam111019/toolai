@@ -3,6 +3,8 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const app = express();
 const db = require('./config/db');
 const server = http.createServer(app);
@@ -28,9 +30,58 @@ require('./services/noti-scheduler-signup-trial-used');
 require('./services/noti-scheduler-events');
 require('./services/noti-sender');
 
-// Middleware chung
-app.use(cors());
+// Security Middlewares
+app.use(helmet());
+
+// Strictly configure CORS
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Cho phép requests không có origin (như Mobile App, Postman hoặc curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Blocked by CORS'));
+  },
+  credentials: true
+}));
+
 app.use(express.json()); // parse JSON body
+
+// Rate Limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: {
+    success: false,
+    error: {
+      code: 'TOO_MANY_REQUESTS',
+      message: 'Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau 15 phút.'
+    }
+  }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // limit each IP to 15 auth requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      code: 'TOO_MANY_REQUESTS',
+      message: 'Yêu cầu đăng nhập quá thường xuyên. Vui lòng thử lại sau 15 phút.'
+    }
+  }
+});
+
+app.use('/api/', apiLimiter);
+app.use('/api/auth/', authLimiter);
 
 // Health check
 app.get('/', (req, res) => {
