@@ -12,21 +12,21 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 // ─── Mock all dependencies ──────────────────────────────────────────────────
-jest.mock('../../../auth/auth.repository');
-jest.mock('../../../utils/mailer', () => ({
+jest.mock('../../../src/repositories/auth-repository');
+jest.mock('../../../src/utils/mailer', () => ({
   sendOtpEmail: jest.fn().mockResolvedValue(undefined),
   sendEmailDangKyThanhCong: jest.fn().mockResolvedValue(undefined),
   sendEmailFogotPassword: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../../../utils/noti', () => ({
+jest.mock('../../../src/utils/noti', () => ({
   pushNoti: jest.fn(),
 }));
-jest.mock('../../../utils/discordNotify', () => ({
+jest.mock('../../../src/utils/discord-notify', () => ({
   sendDiscord: jest.fn().mockResolvedValue(undefined),
 }));
 
-const authRepo = require('../../../auth/auth.repository');
-const authService = require('../../../auth/auth.service');
+const authRepo = require('../../../src/repositories/auth-repository');
+const authService = require('../../../src/services/auth-service');
 const AppError = require('../../../src/utils/app-error');
 
 // ─── Test Data ──────────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ describe('authService.login', () => {
     authRepo.findUserPackage.mockResolvedValue(null);
     authRepo.updateDeviceId.mockResolvedValue(undefined);
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true);
-    const { pushNoti } = require('../../../utils/noti');
+    const { pushNoti } = require('../../../src/utils/noti');
 
     await authService.login('test@example.com', 'pass', 'new-device');
 

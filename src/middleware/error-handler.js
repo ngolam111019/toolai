@@ -1,5 +1,5 @@
 const AppError = require('../utils/app-error');
-const { sendDiscord } = require('../../utils/discordNotify');
+const { sendDiscord } = require('../utils/discord-notify');
 
 /**
  * Global Express Error Handler

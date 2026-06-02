@@ -5,16 +5,16 @@
  * Test: validateToolAccess(), processTool(), calculatePrediction logic
  */
 
-jest.mock('../../../tool/tool.repository');
-jest.mock('../../../utils/format', () => ({
+jest.mock('../../../src/repositories/tool-repository');
+jest.mock('../../../src/utils/format', () => ({
   getTodayVN: jest.fn().mockReturnValue('2026-06-01'),
 }));
 
 // Set env before require
 process.env.GATEWAY_DEMO = 'Zon88';
 
-const toolRepo = require('../../../tool/tool.repository');
-const toolService = require('../../../tool/tool.service');
+const toolRepo = require('../../../src/repositories/tool-repository');
+const toolService = require('../../../src/services/tool-service');
 const AppError = require('../../../src/utils/app-error');
 
 // ─── validateToolAccess() ────────────────────────────────────────────────────

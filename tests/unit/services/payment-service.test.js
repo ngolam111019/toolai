@@ -6,18 +6,18 @@
  */
 const crypto = require('crypto');
 
-jest.mock('../../../payment/payment.repository');
+jest.mock('../../../src/repositories/payment-repository');
 jest.mock('axios');
-jest.mock('../../../utils/discordNotify', () => ({
+jest.mock('../../../src/utils/discord-notify', () => ({
   sendDiscord: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../../../utils/noti', () => ({
+jest.mock('../../../src/utils/noti', () => ({
   pushNoti: jest.fn(),
 }));
-jest.mock('../../../socket/socket', () => ({
+jest.mock('../../../src/services/socket-service', () => ({
   emitToRoom: jest.fn().mockReturnValue(true),
 }));
-jest.mock('../../../utils/format', () => ({
+jest.mock('../../../src/utils/format', () => ({
   formatWithUnit: jest.fn((amount, unit) => `${amount} ${unit}`),
   titleDescTypeSenDiscord: jest.fn(() => ({ t: 'title', d: 'desc', type: 'payment' })),
 }));
@@ -26,8 +26,8 @@ process.env.IS_PAYMENT_API_DEMO = '1';
 process.env.GB_USERNAME = 'testuser';
 process.env.GB_PASSWORD = 'testpass';
 
-const paymentRepo = require('../../../payment/payment.repository');
-const paymentService = require('../../../payment/payment.service');
+const paymentRepo = require('../../../src/repositories/payment-repository');
+const paymentService = require('../../../src/services/payment-service');
 const AppError = require('../../../src/utils/app-error');
 
 describe('paymentService.createPayment', () => {

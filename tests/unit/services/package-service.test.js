@@ -2,17 +2,17 @@
  * Package Service — Unit Tests
  */
 
-jest.mock('../../../package/package.repository');
-jest.mock('../../../utils/discordNotify', () => ({
+jest.mock('../../../src/repositories/package-repository');
+jest.mock('../../../src/utils/discord-notify', () => ({
   sendDiscord: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../../../utils/format', () => ({
+jest.mock('../../../src/utils/format', () => ({
   formatWithUnit: jest.fn((amount, unit) => `${amount} ${unit}`),
   titleDescTypeSenDiscord: jest.fn(() => ({ t: 'title', d: 'desc', type: 'upgrade' })),
 }));
 
-const packageRepo = require('../../../package/package.repository');
-const packageService = require('../../../package/package.service');
+const packageRepo = require('../../../src/repositories/package-repository');
+const packageService = require('../../../src/services/package-service');
 const AppError = require('../../../src/utils/app-error');
 
 describe('packageService.getPackages', () => {

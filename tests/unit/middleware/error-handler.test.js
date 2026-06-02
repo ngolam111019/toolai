@@ -1,8 +1,8 @@
 const AppError = require('../../../src/utils/app-error');
 const { errorHandler, notFoundHandler } = require('../../../src/middleware/error-handler');
 
-// Mock discordNotify — không gọi thật
-jest.mock('../../../utils/discordNotify', () => ({
+// Mock discord-notify — không gọi thật
+jest.mock('../../../src/utils/discord-notify', () => ({
   sendDiscord: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -70,7 +70,7 @@ describe('errorHandler middleware', () => {
   });
 
   it('should send Discord alert for 5xx errors', () => {
-    const { sendDiscord } = require('../../../utils/discordNotify');
+    const { sendDiscord } = require('../../../src/utils/discord-notify');
     const error = new Error('crash');
 
     errorHandler(error, mockReq, mockRes, mockNext);
@@ -79,7 +79,7 @@ describe('errorHandler middleware', () => {
   });
 
   it('should NOT send Discord for 4xx errors', () => {
-    const { sendDiscord } = require('../../../utils/discordNotify');
+    const { sendDiscord } = require('../../../src/utils/discord-notify');
     sendDiscord.mockClear();
     const error = new AppError('bad request', 400, 'BAD');
 
