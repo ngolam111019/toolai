@@ -1,0 +1,245 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// BẢNG: n_users
+// Lưu thông tin tài khoản người dùng
+// ============================================================
+model NUser {
+  id                   Int       @id @default(autoincrement())
+  email                String    @unique
+  password_hash        String?
+  device_id            String?
+  balance_xu           Int       @default(0)
+  fcm_token            String?
+  web_push_subscription Json?
+  platform             Int?      // 0 = mobile, 1 = web
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  // Relations
+  userPackages         NUserPackage[]
+  transactions         NTransaction[]
+  toolUsageLogs        NToolUsageLog[]
+  eventLogs            NUserEventLog[]
+  notifications        NUserNotification[]
+
+  @@map("n_users")
+}
+
+// ============================================================
+// BẢNG: n_user_pending
+// Lưu OTP chờ xác thực khi đăng ký tài khoản
+// ============================================================
+model NUserPending {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  otp        String
+  expires_at DateTime
+  verified   Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  @@map("n_user_pending")
+}
+
+// ============================================================
+// BẢNG: n_reset_otps
+// Lưu OTP dùng để khôi phục mật khẩu
+// ============================================================
+model NResetOtp {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  otp        String
+  created_at DateTime @default(now())
+
+  @@map("n_reset_otps")
+}
+
+// ============================================================
+// BẢNG: n_packages
+// Danh mục các gói dịch vụ (Trial, Pro, Premium, ...)
+// ============================================================
+model NPackage {
+  id               Int      @id @default(autoincrement())
+  name             String
+  price            Int      @default(0)
+  price_2          Int?     // Giá khuyến mãi / giá thứ hai
+  duration_days    Int?     // Số ngày sử dụng (null nếu is_lifetime)
+  is_lifetime      Boolean  @default(false)
+  gateways         Json?    // Mảng cổng game được phép dùng
+  description      String?
+  color            String?
+  bg_color         String?
+  is_best_saler    Boolean  @default(false)
+  max_turns_per_day Int     @default(0)
+  is_gift          Boolean  @default(false)
+
+  // Relations
+  userPackages     NUserPackage[]
+
+  @@map("n_packages")
+}
+
+// ============================================================
+// BẢNG: n_user_packages
+// Gói dịch vụ đang được kích hoạt của từng user
+// ============================================================
+model NUserPackage {
+  id               Int      @id @default(autoincrement())
+  user_id          Int
+  package_id       Int
+  activated_at     DateTime?
+  expired_at       DateTime?
+  turns_used_today Int      @default(0)
+  last_turn_reset  DateTime?
+
+  // Relations
+  user             NUser    @relation(fields: [user_id], references: [id])
+  package          NPackage @relation(fields: [package_id], references: [id])
+
+  @@map("n_user_packages")
+}
+
+// ============================================================
+// BẢNG: n_transactions
+// Lịch sử giao dịch Xu (nạp, mua gói, tặng thưởng)
+// ============================================================
+model NTransaction {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  amount     Int      // Dương = cộng, Âm = trừ
+  type       String   // 'payment' | 'purchase' | 'bonus'
+  status     String   // 'pending' | 'success' | 'failed'
+  reason     String?
+  ref_code   String?  // Mã giao dịch / tranid
+  expired_at DateTime?
+  package_id Int?     // Gói muốn mua (nếu thanh toán kèm gói)
+  created_at DateTime @default(now())
+
+  // Relations
+  user       NUser    @relation(fields: [user_id], references: [id])
+
+  @@map("n_transactions")
+}
+
+// ============================================================
+// BẢNG: n_tool_usage_logs
+// Lịch sử sử dụng Tool AI của từng user
+// ============================================================
+model NToolUsageLog {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  gateway    String   // Cổng game (vd: 'Zon88')
+  prediction String?  // Kết quả dự đoán ('Tài' | 'Xỉu')
+  round_code String?  // Mã vòng chơi
+  used_at    DateTime @default(now())
+
+  // Relations
+  user       NUser    @relation(fields: [user_id], references: [id])
+
+  @@map("n_tool_usage_logs")
+}
+
+// ============================================================
+// BẢNG: n_user_event_logs
+// Log các sự kiện của user trong hệ thống (đăng ký, nâng cấp, ...)
+// dùng để trigger notification funnel
+// ============================================================
+model NUserEventLog {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  event_code  String   // 'ON_SIGNUP' | 'ON_UPGRADE_TRIAL_PRO' | 'ON_UPGRADE_PREMIUM' | 'ON_PREMIUM_PRO_INACTIVE' | 'ON_SIGNUP_TRIAL_USED'
+  meta        Json?    // Dữ liệu tuỳ chọn đi kèm event
+  event_time  DateTime @default(now())
+
+  // Relations
+  user        NUser    @relation(fields: [user_id], references: [id])
+
+  @@map("n_user_event_logs")
+}
+
+// ============================================================
+// BẢNG: n_notification_templates
+// Template thông báo tự động theo từng event/funnel
+// ============================================================
+model NNotificationTemplate {
+  id              Int      @id @default(autoincrement())
+  code            String   @unique // Mã định danh template (vd: 'SIGNUP_WELCOME')
+  trigger_event   String   // Event trigger: 'ON_SIGNUP' | 'ON_UPGRADE_TRIAL_PRO' | ...
+  delay_hours     Int      @default(0) // Số giờ trì hoãn sau event
+  title           String
+  message         String
+  btn_text        String?
+  screen_redirect String?  // Màn hình điều hướng khi click
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+
+  // Relations
+  queues          NNotificationQueue[]
+
+  @@map("n_notification_templates")
+}
+
+// ============================================================
+// BẢNG: n_notifications_queue
+// Hàng đợi thông báo cần gửi (được tạo từ event + template)
+// ============================================================
+model NNotificationQueue {
+  id              Int      @id @default(autoincrement())
+  user_id         Int
+  email           String?
+  platform        Int?
+  title           String?
+  message         String?
+  btn_text        String?
+  screen_redirect String?
+  template_id     Int
+  trigger_event   String
+  send_after      DateTime
+  status          Int      @default(0)
+  // 0=pending, 1=sent, 2=failed, 3=canceled, 9=processing
+  sent_at         DateTime?
+  canceled_at     DateTime?
+  locked_at       DateTime?
+  retry_count     Int      @default(0)
+  created_at      DateTime @default(now())
+
+  // Relations
+  template        NNotificationTemplate @relation(fields: [template_id], references: [id])
+
+  @@unique([user_id, template_id])
+  @@map("n_notifications_queue")
+}
+
+// ============================================================
+// BẢNG: n_user_notifications
+// Lịch sử thông báo đã gửi, dùng để app đồng bộ (incremental sync)
+// ============================================================
+model NUserNotification {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  title       String
+  body        String?
+  type        String?  // Loại thông báo (trigger_event hoặc custom type)
+  deep_link   String?  // Màn hình điều hướng
+  image_url   String?
+  meta_json   Json?    // Dữ liệu tuỳ chọn (template_id, btn_text, ...)
+  is_read     Boolean  @default(false)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relations
+  user        NUser    @relation(fields: [user_id], references: [id])
+
+  @@map("n_user_notifications")
+}
