@@ -6,6 +6,7 @@
     "node": ">=16.0.0"
   },
   "scripts": {
+    "start": "node src/index.js",
     "test": "jest --forceExit --detectOpenHandles",
     "test:unit": "jest tests/unit/ --forceExit",
     "test:coverage": "jest --coverage --forceExit",
