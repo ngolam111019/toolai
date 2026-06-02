@@ -1,40 +1,36 @@
-# Deploy Command
+# Deploy Command (Heroku)
 
 ## Description
-Deploy the application to the target environment.
+Deploy the application to Heroku.
 
 ## Usage
-Tell Claude: "Run the deploy command" or "Deploy to [environment]"
+Tell the AI: "Run the deploy command" or "Deploy to Heroku"
 
 ## Steps
 
 ### 1. Pre-deploy Checklist
-- [ ] All tests pass (`npm test`)
-- [ ] No linting errors (`npm run lint`)
-- [ ] Environment variables are configured
-- [ ] Database migrations are ready
+- [ ] Ensure all local tests pass (`npm test`)
+- [ ] All code changes committed to Git
+- [ ] Environment variables are configured in Heroku dashboard
 
-### 2. Build
+### 2. Deploy
+Push the latest code to Heroku:
 ```bash
-npm run build
+git push heroku main
 ```
 
-### 3. Deploy
+### 3. Database Migration
+Apply database schema updates:
 ```bash
-# Development
-npm run deploy:dev
-
-# Production
-npm run deploy:prod
+heroku run npx prisma db push
 ```
 
 ### 4. Post-deploy Verification
-- Check application health endpoint
-- Verify logs for errors
-- Run smoke tests
+- [ ] Verify logs show server running (`heroku logs --tail`)
+- [ ] Ping root URL to check health
 
 ## Rollback
 If deployment fails:
 ```bash
-npm run rollback
+heroku rollback
 ```

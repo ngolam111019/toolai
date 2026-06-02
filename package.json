@@ -10,7 +10,11 @@
     "test": "jest --forceExit --detectOpenHandles",
     "test:unit": "jest tests/unit/ --forceExit",
     "test:coverage": "jest --coverage --forceExit",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "deploy": "npm test && git push heroku main",
+    "deploy:logs": "heroku logs --tail",
+    "deploy:migrate": "heroku run npx prisma db push",
+    "deploy:rollback": "heroku rollback"
   },
   "repository": {
     "type": "git",
