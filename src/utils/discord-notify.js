@@ -1,10 +1,9 @@
-// discordNotifier.js
 const axios = require('axios');
 
 const WEBHOOKS = {
-  error: 'https://discord.com/api/webhooks/1377945566008311849/o3bmXWy8QKqX10QC1cKdvM0Jp44vJk3wIZVAkbQkXQ8m_8jrtBm7nIhdTPF3o85EzFWb',
-  payment: 'https://discord.com/api/webhooks/1377945715195646013/elbRrh8Op0p5i4WKx0RQwlhGi2hZEeEsAKaDBpDm9nRLoiRJq1S9VU91Eyz6mYNjzFGD',
-  upgrade: 'https://discord.com/api/webhooks/1377945785454432327/OFw4g1kwHjl51nUzUJqpKCPGBu1s4VjEBzvxN9XygQX67yHZs_nhMShwXqT3IOjpHEHu',
+  error: process.env.DISCORD_WEBHOOK_ERROR,
+  payment: process.env.DISCORD_WEBHOOK_PAYMENT,
+  upgrade: process.env.DISCORD_WEBHOOK_UPGRADE,
 };
 
 async function sendDiscord(type, message, embed = null) {

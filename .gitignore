@@ -12,6 +12,7 @@ yarn-error.log
 .env.local
 .env.test
 .env.production
+.env.docker
 
 # Firebase service account — CRITICAL: never commit
 serviceAccountKey.json

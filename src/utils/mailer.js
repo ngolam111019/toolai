@@ -3,10 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const Mustache = require('mustache');
 
-var transporter = nodemailer.createTransport({ // config mail server
-    host: "smtp.hostinger.com",
-    port: 465,
-    secure: true,
+var transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,

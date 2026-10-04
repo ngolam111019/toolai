@@ -115,20 +115,22 @@ model NUserPackage {
 // Lịch sử giao dịch Xu (nạp, mua gói, tặng thưởng)
 // ============================================================
 model NTransaction {
-  id         Int      @id @default(autoincrement())
-  user_id    Int
-  amount     Int      // Dương = cộng, Âm = trừ
-  type       String   // 'payment' | 'purchase' | 'bonus'
-  status     String   // 'pending' | 'success' | 'failed'
-  reason     String?
-  ref_code   String?  // Mã giao dịch / tranid
-  expired_at DateTime?
-  package_id Int?     // Gói muốn mua (nếu thanh toán kèm gói)
-  created_at DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  user_id       Int
+  amount        Int      // Duong = cong, Am = tru
+  type          String   // 'payment' | 'purchase' | 'bonus'
+  status        String   // 'pending' | 'success' | 'failed'
+  reason        String?
+  ref_code      String?  // Ma giao dich / tranid (UUID)
+  transfer_code String?  // Ma chuyen khoan ngan (6 ky tu) de match webhook
+  expired_at    DateTime?
+  package_id    Int?     // Goi muon mua (neu thanh toan kem goi)
+  created_at    DateTime @default(now())
 
   // Relations
-  user       NUser    @relation(fields: [user_id], references: [id])
+  user          NUser    @relation(fields: [user_id], references: [id])
 
+  @@index([transfer_code])
   @@map("n_transactions")
 }
 

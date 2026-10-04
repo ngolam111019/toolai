@@ -2,28 +2,31 @@
  * Payment Service — Business Logic Layer
  *
  * Xử lý logic:
- * - Tạo QR payment
- * - Xử lý callback từ payment gateway
- * - Xác minh chữ ký
+ * - Tạo QR payment (VietQR - MB Bank)
+ * - Xử lý webhook từ Sepay
  * - Cộng/trừ xu, nâng cấp gói
  */
-const axios = require('axios');
 const crypto = require('crypto');
-const querystring = require('querystring');
 const { v4: uuidv4 } = require('uuid');
 
 const AppError = require('../utils/app-error');
 const paymentRepo = require('../repositories/payment-repository');
+const db = require('../config/db');
 const format = require('../utils/format');
 const { sendDiscord } = require('../utils/discord-notify');
 const { emitToRoom } = require('./socket-service');
 const { pushNoti } = require('../utils/noti');
 
+const MBBANK_ACCOUNT = process.env.MBBANK_ACCOUNT_NO;
+const MBBANK_NAME = process.env.MBBANK_ACCOUNT_NAME;
+const SEPAY_API_KEY = process.env.SEPAY_API_KEY;
+const SEPAY_WEBHOOK_SECRET = process.env.SEPAY_WEBHOOK_SECRET;
+
 const BONUS_THRESHOLD = 2000000;
 const BONUS_AMOUNT = 500000;
 
 /**
- * Map package_id → event code cho event log
+ * Map package_id -> event code cho event log
  */
 const PACKAGE_EVENT_CODES = {
   1: 'ON_UPGRADE_TRIAL_PRO',
@@ -32,208 +35,334 @@ const PACKAGE_EVENT_CODES = {
 };
 
 /**
- * Tạo payment QR (giao dịch nạp xu)
+ * Tao ma noi dung chuyen khoan ngan gon (6 ky tu)
+ */
+function generateTransferCode() {
+  return crypto.randomBytes(3).toString('hex').toUpperCase();
+}
+
+/**
+ * Tao VietQR URL cho MB Bank
+ * @param {number} amount
+ * @param {string} content - Noi dung chuyen khoan
+ * @returns {string}
+ */
+function buildVietQRUrl(amount, content) {
+  const params = new URLSearchParams({
+    amount: amount.toString(),
+    addInfo: content,
+    accountName: MBBANK_NAME,
+  });
+  return `https://img.vietqr.io/image/MB-${MBBANK_ACCOUNT}-compact2.png?${params}`;
+}
+
+/**
+ * Tao payment QR (giao dich nap xu)
  *
  * @param {number} userId
- * @param {number} amount - Số tiền VND
+ * @param {number} amount - So tien VND
  * @param {number} packageId
  * @returns {Promise<{tranid, expired_at, qr_url, account_number, account_name, content, bank}>}
  */
 async function createPayment(userId, amount, packageId) {
   const tranId = uuidv4();
-  const expiredAt = new Date(Date.now() + 5 * 60 * 1000); // 5 phút
-  const message = `uid${userId}-${tranId}`;
+  const expiredAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phut
+  const transferCode = generateTransferCode();
+  const content = `UID${userId} ${transferCode}`;
 
-  let paymentData;
+  const qrUrl = buildVietQRUrl(amount, content);
 
-  if (process.env.IS_PAYMENT_API_DEMO == 1) {
-    // Mode demo — trả dữ liệu giả lập
-    paymentData = {
-      redirectLink: 'data:image/png;base64,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',
-      bank: 'Vietcombank',
-      bankname: 'Dương Nhật Thành',
-      banknumber: '',
-      phonenumber: '0877450226',
-      content: 'RXWZYM',
-    };
-  } else {
-    // Mode thật — gọi GameBank API
-    const gbUrl = `https://sv.gamebank.vn/payment/api?` + querystring.stringify({
-      username: process.env.GB_USERNAME,
-      password: process.env.GB_PASSWORD,
-      tran_id: tranId,
-      amount,
-      bank_code: 'MSB',
-      url_code: 448,
-      message,
-    });
-
-    const gbRes = await axios.get(gbUrl);
-    if (gbRes.data?.code != 1) {
-      throw new AppError(gbRes.data?.message || 'Tạo QR thất bại', 500, 'PAYMENT_QR_FAILED');
-    }
-    paymentData = gbRes.data;
-  }
-
-  await paymentRepo.createTransaction(userId, amount, tranId, expiredAt, packageId);
+  await paymentRepo.createTransaction(userId, amount, tranId, expiredAt, packageId, transferCode);
 
   return {
     tranid: tranId,
     expired_at: expiredAt,
-    qr_url: paymentData.redirectLink,
-    account_number: paymentData.banknumber || paymentData.phonenumber,
-    account_name: paymentData.bankname,
-    content: paymentData.content,
-    bank: paymentData.bank,
+    qr_url: qrUrl,
+    account_number: MBBANK_ACCOUNT,
+    account_name: MBBANK_NAME,
+    content,
+    bank: 'MB Bank',
   };
 }
 
 /**
- * Xác minh chữ ký từ payment gateway callback
- * @param {object} queryParams - req.query
+ * Xac minh API key tu Sepay webhook
+ * @param {string} apiKey - API key from header
  * @returns {boolean}
  */
-function verifyCallbackSignature({ username, password, amount, tran_id, errorcode, messages, signature }) {
-  const raw = username + password + amount + tran_id + errorcode + messages;
-  const computedSig = crypto.createHash('sha256').update(raw).digest('hex');
-  return computedSig === signature;
+function verifySepayApiKey(apiKey) {
+  if (!SEPAY_API_KEY) return true; // Skip in dev if not configured
+  return apiKey === SEPAY_API_KEY;
 }
 
 /**
- * Xử lý callback payment (thành công hoặc thất bại)
+ * Xac minh HMAC-SHA256 signature tu Sepay webhook
+ * Format: sha256=HMAC-SHA256(timestamp.body, secret)
+ * @param {string} signature - x-sepay-signature header
+ * @param {string} timestamp - x-sepay-timestamp header
+ * @param {string} rawBody - Raw request body
+ * @returns {boolean}
+ */
+function verifySepayHmac(signature, timestamp, rawBody) {
+  if (!SEPAY_WEBHOOK_SECRET) return true; // Skip in dev if not configured
+  if (!signature || !timestamp) return false;
+
+  // Check timestamp within 5 minutes
+  const reqTime = parseInt(timestamp, 10);
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - reqTime) > 300) {
+    console.log('Webhook timestamp expired:', reqTime, 'now:', now);
+    return false;
+  }
+
+  // Verify HMAC
+  const payload = `${timestamp}.${rawBody}`;
+  const expectedSig = 'sha256=' + crypto
+    .createHmac('sha256', SEPAY_WEBHOOK_SECRET)
+    .update(payload)
+    .digest('hex');
+
+  // Check length first to avoid timingSafeEqual throwing
+  if (signature.length !== expectedSig.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSig)
+  );
+}
+
+/**
+ * Parse noi dung chuyen khoan de lay userId va transferCode
+ * Format: "UID{userId} {transferCode}"
+ * @param {string} content
+ * @returns {{userId: number, transferCode: string} | null}
+ */
+function parseTransferContent(content) {
+  if (!content) return null;
+  const match = content.toUpperCase().match(/UID(\d+)\s+([A-F0-9]{6})/);
+  if (!match) return null;
+  return {
+    userId: parseInt(match[1], 10),
+    transferCode: match[2],
+  };
+}
+
+/**
+ * Xu ly upgrade package trong transaction
+ * @param {object} tx - Transaction record
+ * @param {object} client - DB client for transaction
+ * @returns {Promise<{upgraded: boolean, reason?: string, package?: object}>}
+ */
+async function processPackageUpgrade(tx, client) {
+  const pkg = await paymentRepo.findPackageById(tx.package_id);
+  if (!pkg) {
+    return { upgraded: false, reason: 'PACKAGE_NOT_FOUND', message: 'Goi khong ton tai' };
+  }
+
+  // Package_id = 1 (Trial) co gioi han
+  if (tx.package_id === 1) {
+    return {
+      upgraded: false,
+      reason: 'TRIAL_LIMIT',
+      message: `Nang cap KHONG thanh cong ${pkg.name} (Da du suat). Vui long chon goi khac.`,
+      package: pkg,
+    };
+  }
+
+  const currentBalance = await paymentRepo.getUserBalance(tx.user_id);
+  if (currentBalance < pkg.price) {
+    return {
+      upgraded: false,
+      reason: 'INSUFFICIENT_BALANCE',
+      message: `Khong du Xu de nang cap ${pkg.name}. Can ${format.formatWithUnit(pkg.price, 'Xu')}, hien co ${format.formatWithUnit(currentBalance, 'Xu')}.`,
+      package: pkg,
+    };
+  }
+
+  // Thuc hien upgrade trong transaction
+  await paymentRepo.debitUserBalance(tx.user_id, pkg.price, client);
+  await paymentRepo.insertPurchaseTransaction(tx.user_id, pkg.price, pkg.name, pkg.id, client);
+  await paymentRepo.deleteUserPackages(tx.user_id, client);
+
+  const expiredAt = pkg.is_lifetime
+    ? '9999-12-31'
+    : new Date(Date.now() + pkg.duration_days * 86400 * 1000);
+
+  await paymentRepo.createUserPackage(tx.user_id, pkg.id, expiredAt, client);
+
+  const eventCode = PACKAGE_EVENT_CODES[pkg.id] || 'ON_SIGNUP';
+  await paymentRepo.insertUserEventLog(tx.user_id, eventCode, client);
+
+  return {
+    upgraded: true,
+    message: `Nang cap thanh cong ${pkg.name} (-${format.formatWithUnit(pkg.price, 'Xu')})`,
+    package: pkg,
+  };
+}
+
+/**
+ * Xu ly webhook tu Sepay (khi co giao dich moi)
+ * Su dung DB transaction de dam bao data integrity
  *
- * @param {object} callbackParams - req.query từ payment gateway
+ * @param {object} webhookData - Data tu Sepay webhook
  * @returns {Promise<void>}
  */
-async function handlePaymentCallback(callbackParams) {
-  const { username, password, amount, tran_id, errorcode, messages, signature } = callbackParams;
+async function handleSepayWebhook(webhookData) {
+  const { transferAmount, content, transferType } = webhookData;
 
-  // Xác minh chữ ký
-  if (!verifyCallbackSignature(callbackParams)) {
-    throw new AppError('Sai chữ ký', 403, 'INVALID_SIGNATURE');
+  // Chi xu ly giao dich IN (nhan tien)
+  if (transferType !== 'in') {
+    return;
   }
 
-  // Xác minh credentials
-  if (username !== process.env.GB_USERNAME || password !== process.env.GB_PASSWORD) {
-    throw new AppError('Tài khoản không hợp lệ', 403, 'INVALID_CREDENTIALS');
+  // Parse noi dung chuyen khoan
+  const parsed = parseTransferContent(content);
+  if (!parsed) {
+    console.log('Khong parse duoc noi dung:', content);
+    return;
   }
 
-  // Tìm giao dịch pending
-  const tx = await paymentRepo.findPendingTransaction(tran_id);
+  const { userId, transferCode } = parsed;
+  const actualAmount = parseInt(transferAmount, 10);
+
+  // Tim giao dich pending theo transferCode
+  const tx = await paymentRepo.findPendingTransactionByCode(transferCode);
   if (!tx) {
-    throw new AppError('Giao dịch không hợp lệ hoặc đã xử lý', 404, 'TRANSACTION_NOT_FOUND');
+    console.log('Khong tim thay giao dich pending voi code:', transferCode);
+    return;
+  }
+
+  // Kiem tra userId khop
+  if (tx.user_id !== userId) {
+    console.log('userId khong khop:', tx.user_id, userId);
+    return;
+  }
+
+  // Amount verification
+  const expectedAmount = tx.amount;
+  let amountWarning = null;
+  if (actualAmount < expectedAmount) {
+    amountWarning = `So tien thuc nhan (${actualAmount}) it hon yeu cau (${expectedAmount})`;
+    console.warn('Amount mismatch:', { expected: expectedAmount, actual: actualAmount, transferCode });
   }
 
   const userNotify = await paymentRepo.getUserForNotification(tx.user_id);
+  const bonusAmount = (actualAmount >= BONUS_THRESHOLD) ? BONUS_AMOUNT : 0;
 
-  // ─── Payment FAILED ────────────────────────────────────────
-  if (errorcode !== '9') {
-    await paymentRepo.markTransactionFailed(tx.id);
+  // Xu ly payment trong transaction
+  let upgradeResult = null;
 
-    const title = `❌ Nạp ${format.formatWithUnit(amount, 'Xu')} thất bại. `;
-    const message = title + `\n Trạng thái: ${messages}`;
-    const resultData = { is_success: false, amount, tranid: tran_id, message, confirmed_at: new Date() };
+  try {
+    await db.withTransaction(async (client) => {
+      // Cong xu chinh
+      await paymentRepo.creditUserBalance(tx.user_id, actualAmount, client);
+      await paymentRepo.markTransactionSuccess(tx.id, actualAmount, client);
 
-    const emitted = emitToRoom(tran_id, 'payment_result', resultData);
-    if (!emitted) {
-      pushNoti(userNotify, { title, message: `Mã giao dịch: ${tran_id}\n ${message}`, btnText: 'Xem lịch sử giao dịch', screen_redirect: 'history' });
-    }
+      // Cong xu bonus neu co
+      if (bonusAmount > 0) {
+        await paymentRepo.insertBonusTransaction(tx.user_id, bonusAmount, tx.ref_code, client);
+        await paymentRepo.creditUserBalance(tx.user_id, bonusAmount, client);
+      }
 
-    throw new AppError(messages, 400, 'PAYMENT_FAILED');
+      // Nang cap goi neu co package_id
+      if (tx.package_id && tx.package_id > 0) {
+        upgradeResult = await processPackageUpgrade(tx, client);
+
+        // Neu upgrade that bai vi INSUFFICIENT_BALANCE, van cho phep commit
+        // (user da duoc cong Xu, chi khong upgrade duoc)
+        if (!upgradeResult.upgraded && upgradeResult.reason === 'INSUFFICIENT_BALANCE') {
+          // Khong throw, de transaction commit
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Payment webhook transaction error:', error);
+
+    // Send Discord alert
+    sendDiscord('error', null, {
+      title: 'Payment Webhook Error',
+      description: `TransferCode: ${transferCode}\nUserId: ${userId}\nAmount: ${actualAmount}\nError: ${error.message}`,
+      color: 0xFF0000,
+    });
+
+    throw error;
   }
 
-  // ─── Payment SUCCESS ───────────────────────────────────────
-  const bonusAmount = (amount == BONUS_THRESHOLD) ? BONUS_AMOUNT : 0;
+  // --- Build response & notifications (outside transaction) ---
   let messageBonus = '';
-
-  // Cộng xu chính
-  await paymentRepo.creditUserBalance(tx.user_id, amount);
-  await paymentRepo.markTransactionSuccess(tx.id, amount);
-
-  // Cộng xu bonus nếu có
   if (bonusAmount > 0) {
-    await paymentRepo.insertBonusTransaction(tx.user_id, bonusAmount, tx.ref_code);
-    await paymentRepo.creditUserBalance(tx.user_id, bonusAmount);
-    messageBonus = `Được tặng thêm ${format.formatWithUnit(bonusAmount, 'Xu')} vào tài khoản.`;
+    messageBonus = `Duoc tang them ${format.formatWithUnit(bonusAmount, 'Xu')} vao tai khoan.`;
   }
 
-  const totalAmount = parseInt(amount) + parseInt(bonusAmount);
-  const title = `✅ Nạp ${format.formatWithUnit(parseInt(amount), 'Xu')} thành công. `;
+  const totalAmount = actualAmount + bonusAmount;
+  const title = `Nap ${format.formatWithUnit(actualAmount, 'Xu')} thanh cong.`;
 
   const resultData = {
     is_success: true,
-    tranid: tran_id,
+    tranid: tx.ref_code,
     title,
-    message: title + messageBonus,
+    message: title + (messageBonus ? ' ' + messageBonus : ''),
     amount: totalAmount,
     confirmed_at: new Date(),
-    btnText: 'Xem lịch sử giao dịch',
+    btnText: 'Xem lich su giao dich',
     screen_redirect: 'history',
     oneClick: false,
   };
 
-  // Nâng cấp gói nếu có package_id
+  // Them thong tin upgrade vao message
   let discordMeta = {};
-  if (tx.package_id && tx.package_id > 0) {
-    const pkg = await paymentRepo.findPackageById(tx.package_id);
-    if (!pkg) throw new AppError('Gói không tồn tại', 400, 'PACKAGE_NOT_FOUND');
+  if (upgradeResult) {
+    resultData.message += ' ' + upgradeResult.message;
+    resultData.oneClick = true;
 
-    // Gói slot 1 đã đầy (chỉ 1 slot, dùng cho trial upgrade?)
-    if (tx.package_id === 1) {
-      resultData.message += `\n❌ Nâng cấp KHÔNG thành công ${pkg.name} (Đã đủ suất). Vui lòng chọn gói khác.`;
-      resultData.oneClick = true;
-    } else {
-      const currentBalance = await paymentRepo.getUserBalance(tx.user_id);
-      if (currentBalance < pkg.price) {
-        throw new AppError('Không đủ Xu để nâng cấp', 400, 'INSUFFICIENT_BALANCE');
-      }
-
-      // Trừ xu, ghi log, xóa gói cũ, tạo gói mới
-      await paymentRepo.debitUserBalance(tx.user_id, pkg.price);
-      await paymentRepo.insertPurchaseTransaction(tx.user_id, pkg.price, pkg.name, pkg.id);
-      await paymentRepo.deleteUserPackages(tx.user_id);
-
-      const expiredAt = pkg.is_lifetime
-        ? '9999-12-31'
-        : new Date(Date.now() + pkg.duration_days * 86400 * 1000);
-
-      await paymentRepo.createUserPackage(tx.user_id, pkg.id, expiredAt);
-
-      const eventCode = PACKAGE_EVENT_CODES[pkg.id] || 'ON_SIGNUP';
-      await paymentRepo.insertUserEventLog(tx.user_id, eventCode);
-
-      resultData.message += `\n📦 Nâng cấp thành công ${pkg.name} (-${format.formatWithUnit(pkg.price, 'Xu')})`;
-      resultData.oneClick = true;
+    if (upgradeResult.package) {
+      const { t, d, type } = format.titleDescTypeSenDiscord(
+        upgradeResult.upgraded,
+        tx.user_id,
+        upgradeResult.package.name,
+        upgradeResult.package.price,
+        userNotify?.platform,
+        tx.ref_code
+      );
+      discordMeta = { title: t, description: d, type };
     }
-
-    const { t, d, type } = format.titleDescTypeSenDiscord(true, tx.user_id, pkg.name, pkg.price, userNotify?.platform, tran_id);
-    discordMeta = { title: t, description: d, type };
   }
 
-  // Gửi socket / notification
-  const emitted = emitToRoom(tran_id, 'payment_result', resultData);
+  // Them warning neu amount khong khop
+  if (amountWarning) {
+    resultData.message += ` (Luu y: ${amountWarning})`;
+  }
+
+  // Gui socket / notification
+  const emitted = emitToRoom(tx.ref_code, 'payment_result', resultData);
   if (!emitted) {
     pushNoti(userNotify, {
       title,
-      message: `Mã giao dịch: ${tran_id}\n ${resultData.message}`,
-      btnText: 'Xem lịch sử giao dịch',
+      message: `Ma giao dich: ${tx.ref_code}\n${resultData.message}`,
+      btnText: 'Xem lich su giao dich',
       screen_redirect: 'history',
     });
   }
 
-  if (!resultData.oneClick) {
-    const { t, d, type } = format.titleDescTypeSenDiscord(false, tx.user_id, null, amount, userNotify?.platform, tran_id);
+  // Discord notification
+  if (!discordMeta.type) {
+    const { t, d, type } = format.titleDescTypeSenDiscord(false, tx.user_id, null, actualAmount, userNotify?.platform, tx.ref_code);
     discordMeta = { title: t, description: d, type };
   }
 
   sendDiscord(discordMeta.type, null, {
     title: discordMeta.title,
     description: discordMeta.description,
-    color: 0x00FF00,
+    color: upgradeResult?.upgraded === false ? 0xFFAA00 : 0x00FF00,
   });
 }
 
 module.exports = {
   createPayment,
-  handlePaymentCallback,
+  handleSepayWebhook,
+  verifySepayApiKey,
+  verifySepayHmac,
+  parseTransferContent,
 };

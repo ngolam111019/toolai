@@ -85,7 +85,17 @@ app.use('/api/auth/', authLimiter);
 
 // Health check
 app.get('/', (req, res) => {
-  res.json({ success: true, message: 'Tool AI API is running 🚀', version: '1.0.0' });
+  res.json({ success: true, message: 'Tool AI API is running', version: '1.0.0' });
+});
+
+// Docker health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    await db.query('SELECT 1');
+    res.json({ success: true, status: 'healthy', db: 'connected' });
+  } catch (err) {
+    res.status(503).json({ success: false, status: 'unhealthy', db: 'disconnected' });
+  }
 });
 
 // API routes
